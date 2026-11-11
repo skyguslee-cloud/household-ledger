@@ -43,15 +43,33 @@
 
   <div id="app" hidden>
     <nav class="tabs">
-      <button data-tab="ledger" class="on">내역</button>
+      <button data-tab="home" class="on">홈</button>
+      <button data-tab="ledger">내역</button>
       <button data-tab="sms">문자 등록</button>
       <button data-tab="budget">예산</button>
       <button data-tab="fixed">고정 수입·지출</button>
       <button data-tab="settings">설정</button>
     </nav>
 
+    <!-- ===== 홈: 분류별 블록 ===== -->
+    <section id="tab-home">
+      <div class="metrics">
+        <div class="metric"><div class="label" id="hmIncLabel">수입</div><div class="value" id="hmIncome">0</div></div>
+        <div class="metric"><div class="label" id="hmExpLabel">지출</div><div class="value" id="hmExpense">0</div></div>
+        <div class="metric"><div class="label">남은 돈</div><div class="value" id="hmBalance">0</div></div>
+      </div>
+      <div class="sec-head">
+        <h2>지출 · 분류별</h2>
+        <span class="legend"><span class="chip solid">자동</span> 고정 항목 <span class="chip">문자</span> 문자 인식</span>
+      </div>
+      <div class="blocks" id="homeExpense" data-type="expense"></div>
+      <div class="sec-head"><h2>수입 · 분류별</h2></div>
+      <div class="blocks" id="homeIncome" data-type="income"></div>
+      <div class="transfer-line" id="homeTransfer"></div>
+    </section>
+
     <!-- ===== 내역 ===== -->
-    <section id="tab-ledger">
+    <section id="tab-ledger" hidden>
       <div class="card">
         <div class="summary">
           <div><div class="label">수입</div><div class="value" id="sumIncome">0</div></div>

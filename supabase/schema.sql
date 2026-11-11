@@ -30,6 +30,7 @@ create table public.ledger_entries (
   amount      bigint not null,
   recurring_id uuid,                                        -- 고정 수입/지출에서 자동 생성된 경우
   rec_month   text,                                         -- 생성된 달 (YYYY-MM)
+  source      text not null default 'manual' check (source in ('manual','sms','auto')),  -- 입력 경로
   created_at  timestamptz not null default now(),
   constraint ledger_entries_recurring_month unique (recurring_id, rec_month)
 );

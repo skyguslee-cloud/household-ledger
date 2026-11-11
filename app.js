@@ -111,9 +111,12 @@ function makeClient(key) {
 async function q(p) { const { data, error } = await p; if (error) throw error; return data; }
 
 const fromRow = r => ({ id: r.id, date: r.date, time: r.time || '', type: r.type, category: r.category, user: r.user_idx,
-  method: r.method || '', memo: r.memo || '', amount: Number(r.amount), recurring_id: r.recurring_id, rec_month: r.rec_month });
+  method: r.method || '', memo: r.memo || '', amount: Number(r.amount), recurring_id: r.recurring_id, rec_month: r.rec_month,
+  source: r.source || (r.recurring_id ? 'auto' : 'manual') });
+const SOURCES = ['manual', 'sms', 'auto'];
 const toRow = i => ({ space_id: ledgerKey, date: i.date, time: i.time || '', type: i.type, category: i.category, user_idx: i.user ?? 0,
-  method: i.method || '', memo: i.memo || '', amount: i.amount, recurring_id: i.recurring_id || null, rec_month: i.rec_month || null });
+  method: i.method || '', memo: i.memo || '', amount: i.amount, recurring_id: i.recurring_id || null, rec_month: i.rec_month || null,
+  source: SOURCES.includes(i.source) ? i.source : (i.recurring_id ? 'auto' : 'manual') });
 const recFromRow = r => ({ id: r.id, title: r.title, type: r.type, category: r.category, user: r.user_idx, method: r.method || '',
   day: r.day, versions: r.versions || [], skips: r.skips || [], end_month: r.end_month || null });
 const recToRow = r => ({ space_id: ledgerKey, title: r.title, type: r.type, category: r.category, user_idx: r.user, method: r.method || '',
@@ -219,7 +222,7 @@ async function generateRecurring() {
     for (const m of dueMonths(r)) {
       if (state.items.some(i => i.recurring_id === r.id && i.rec_month === m)) continue;
       rows.push(toRow({ date: recDate(r, m), type: r.type, category: r.category, user: r.user, method: r.method,
-        memo: r.title, amount: recAmount(r, m), recurring_id: r.id, rec_month: m }));
+        memo: r.title, amount: recAmount(r, m), recurring_id: r.id, rec_month: m, source: 'auto' }));
     }
   if (!rows.length) return 0;
   // 가족이 동시에 열어도 같은 달이 두 번 생기지 않도록 (recurring_id, rec_month) 중복은 무시
@@ -254,7 +257,7 @@ async function importData(s) {
   const items = (s.items || []).filter(i => TYPES[i.type] && i.date).map(i => ({
     date: i.date, time: i.time || '', type: i.type, category: fixCat(i.type, i.category), user: Math.min(4, Math.max(0, +i.user || 0)),
     method: i.method || '', memo: i.memo || '', amount: Math.round(+i.amount) || 0,
-    recurring_id: i.recurring_id || null, rec_month: i.rec_month || null
+    recurring_id: i.recurring_id || null, rec_month: i.rec_month || null, source: i.source
   })).filter(i => i.amount);
   for (const t of ['ledger_entries', 'ledger_budgets', 'ledger_recurring'])
     await q(sb.from(t).delete().eq('space_id', ledgerKey));
@@ -301,7 +304,7 @@ function refreshMethods() {
 }
 
 /* ---------- 탭 / 월 ---------- */
-let currentTab = 'ledger';
+let currentTab = 'home';
 document.querySelector('.tabs').addEventListener('click', e => {
   const t = e.target.dataset.tab; if (!t) return;
   currentTab = t;
@@ -315,8 +318,197 @@ $('month').addEventListener('change', () => { if ($('month').value) renderAll();
 
 function renderAll() {
   refreshMethods();
-  ({ ledger: renderLedger, budget: renderBudget, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
+  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
 }
+
+/* ---------- 홈: 분류별 블록 ---------- */
+const home = { open: null, edit: null, all: new Set(), others: {} };   // open/edit 키: 'expense:식비', 항목 id 또는 'new'
+const PEEK = 3, MAX_BLOCKS = 6;
+
+function renderHome() {
+  const m = $('month').value, pm = shiftMonth(m, -1), y = m.slice(0, 4);
+  const cur = state.items.filter(i => i.date.startsWith(m));
+  const prev = state.items.filter(i => i.date.startsWith(pm));
+  const tot = t => sum(cur.filter(i => i.type === t).map(i => i.amount));
+  const inc = tot('income'), exp = tot('expense');
+  $('hmIncLabel').textContent = `${+m.slice(5)}월 수입`;
+  $('hmExpLabel').textContent = `${+m.slice(5)}월 지출`;
+  setValue('hmIncome', inc); setValue('hmExpense', exp); setValue('hmBalance', inc - exp);
+
+  const yearSpent = {};
+  state.items.filter(i => i.type === 'expense' && i.date.startsWith(y)).forEach(i => yearSpent[i.category] = (yearSpent[i.category] || 0) + i.amount);
+  $('homeExpense').innerHTML = blocksHtml('expense', cur, prev, exp, m, yearSpent);
+  $('homeIncome').innerHTML = blocksHtml('income', cur, prev, inc, m, yearSpent);
+
+  const trf = {};
+  cur.filter(i => i.type === 'transfer').forEach(i => trf[i.category] = (trf[i.category] || 0) + i.amount);
+  const tl = Object.entries(trf).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${esc(c)} ${fmt(v)}`).join(' · ');
+  $('homeTransfer').innerHTML = tl ? `이체 · 합계 제외 &nbsp; ${tl}` : '';
+}
+
+function blocksHtml(type, cur, prev, total, m, yearSpent) {
+  const g = {}, pg = {};
+  cur.filter(i => i.type === type).forEach(i => (g[i.category] ||= []).push(i));
+  prev.filter(i => i.type === type).forEach(i => pg[i.category] = (pg[i.category] || 0) + i.amount);
+  if (type === 'expense') {   // 예산만 있고 아직 안 쓴 분류도 보여줌
+    const b = state.budgets[m] || {}, a = state.annualBudgets[m.slice(0, 4)] || {};
+    MONTHLY_CATS.forEach(c => { if (b[c]) g[c] ||= []; });
+    ANNUAL_CATS.forEach(c => { if (a[c]) g[c] ||= []; });
+  }
+  if (home.open?.startsWith(type + ':')) g[home.open.slice(type.length + 1)] ||= [];
+  let cats = Object.entries(g).map(([c, items]) => ({ c, items, sum: sum(items.map(i => i.amount)), prev: pg[c] || 0 }))
+    .sort((a, b) => b.sum - a.sum || a.c.localeCompare(b.c));
+  if (!cats.length) return `<div class="blk more" data-act="add-any" data-type="${type}">이 달 ${TYPES[type]} 내역이 없습니다<br><b style="margin-top:6px">+ 추가하기</b></div>`;
+
+  let rest = [];
+  if (cats.length > MAX_BLOCKS + 1 && !home.others[type]) {
+    rest = cats.slice(MAX_BLOCKS).filter(x => home.open !== `${type}:${x.c}`);
+    cats = cats.filter(x => !rest.includes(x));
+  }
+  return cats.map(x => blockHtml(type, x, total, m, yearSpent)).join('') +
+    (rest.length ? `<div class="blk more" data-act="others" data-type="${type}">+ ${rest.slice(0, 2).map(x => esc(x.c)).join(', ')}${rest.length > 2 ? ` 외 ${rest.length - 2}개` : ''}<br><b style="margin-top:4px;color:var(--text)">${won(sum(rest.map(x => x.sum)))}</b></div>` : '');
+}
+
+function blockHtml(type, x, total, m, yearSpent) {
+  const key = `${type}:${x.c}`, open = home.open === key;
+  const share = total > 0 ? Math.max(0, x.sum / total * 100) : 0;
+  const mom = !x.prev ? '지난달 없음'
+    : x.sum === x.prev ? '지난달과 같음'
+    : `지난달보다 ${x.sum > x.prev ? '▲' : '▼'} ${Math.abs((x.sum - x.prev) / Math.abs(x.prev) * 100).toFixed(0)}%`;
+
+  // 예산 (지출만)
+  let sub = mom, barHtml = bar(share).replace(/bar (ok|over)/, 'bar warn');
+  if (type === 'expense') {
+    const isA = ANNUAL_CATS.includes(x.c), y = m.slice(0, 4);
+    const b = isA ? state.annualBudgets[y]?.[x.c] : state.budgets[m]?.[x.c];
+    const used = isA ? (yearSpent[x.c] || 0) : x.sum;
+    const pct = b ? used / b * 100 : 0;
+    const label = isA ? `${y}년 예산` : '예산';
+    if (open) {
+      sub = `${mom} · ${label} <input type="number" min="0" step="${isA ? 100000 : 10000}" data-budget="${esc(x.c)}" value="${b || ''}" placeholder="없음">` +
+        (b ? ` ${isA ? `올해 ${fmt(used)} · ` : ''}${pct.toFixed(0)}%` + (used > b ? ` <span class="over-text">${fmt(used - b)} 초과</span>` : ` · 남음 ${fmt(b - used)}`) : '');
+    } else if (b) {
+      sub = `${mom} · ${isA ? `올해 ${fmt(used)} / ` : '예산 '}${fmt(b)} 중 ${pct.toFixed(0)}%` + (used > b ? ` <span class="over-text">초과</span>` : '');
+    }
+    if (b) barHtml = bar(pct, isA ? yearProgress(y) : null);
+  }
+
+  // 내역
+  let list = open ? [...x.items].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '') || b.id - a.id)
+                  : [...x.items].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  const showAll = open && home.all.has(key);
+  const hidden = open ? (showAll ? 0 : Math.max(0, list.length - 5)) : Math.max(0, list.length - PEEK);
+  list = list.slice(0, open ? (showAll ? list.length : 5) : PEEK);
+  const rows = list.map(i => {
+    const editing = home.edit === i.id;
+    return `<div class="li" data-id="${i.id}">
+      <span class="dt">${i.date.slice(5).replace('-', '.')}</span>
+      <span class="nm">${esc(i.memo || i.category)}</span>${srcTag(i)}${i.type === 'expense' && i.amount < 0 ? '<span class="chip">환불</span>' : ''}
+      <span class="who">${esc(state.users[i.user] ?? '')}${i.method ? ' · ' + esc(i.method) : ''}</span>
+      <span class="amt">${i.amount < 0 ? '+' : ''}${fmt(i.amount)}</span>
+      <button class="ib" data-act="${editing ? 'cancel' : 'edit'}" title="${editing ? '닫기' : '수정'}">${editing ? '✕' : '✎'}</button>
+      ${open ? `<button class="ib" data-act="del" title="삭제">🗑</button>` : ''}
+    </div>${editing ? editForm(i) : ''}`;
+  }).join('');
+
+  return `<div class="blk${open ? ' open' : ''}" data-key="${esc(key)}">
+    <div class="blk-head" data-act="toggle">
+      <span><span class="name">${esc(x.c)}</span>${ANNUAL_CATS.includes(x.c) && type === 'expense' ? ' <span class="chip">연간</span>' : ''} · ${share.toFixed(0)}% · ${x.items.length}건</span>
+      <span class="tools">${open ? `<button class="btn sm" data-act="new">+ 내역 추가</button>` : ''}<span aria-hidden="true">${open ? '▴' : '▾'}</span></span>
+    </div>
+    <div class="blk-total" data-act="toggle">${x.sum < 0 ? '-' : ''}${fmt(x.sum)}</div>
+    <div class="blk-sub">${sub}</div>
+    ${barHtml}
+    ${home.edit === 'new' && open ? editForm({ date: defaultDateFor(m), type, category: x.c, user: 0, method: '', memo: '', amount: '' }) : ''}
+    ${rows || (open ? '' : '<div class="li"><span class="nm" style="color:var(--muted)">아직 내역이 없습니다</span></div>')}
+    ${hidden ? `<div class="li morebtn" data-act="${open ? 'all' : 'toggle'}">나머지 ${hidden}건 더 보기 ▾</div>` : ''}
+  </div>`;
+}
+const defaultDateFor = m => thisMonth() === m ? todayISO() : `${m}-01`;
+
+function editForm(i) {
+  const rec = i.recurring_id && state.recurring.find(r => r.id === i.recurring_id);
+  const rm = i.rec_month;
+  return `<form class="ed" data-id="${i.id ?? ''}">
+    <input type="date" name="date" value="${i.date}" required>
+    <select name="type">${typeOptions(i.type)}</select>
+    <select name="category">${catOptions(i.type, i.category)}</select>
+    <select name="user">${userOptions(i.user)}</select>
+    <input name="memo" value="${esc(i.memo)}" placeholder="내용 / 사용처" maxlength="200">
+    <input name="method" value="${esc(i.method)}" placeholder="결제수단" list="methodList" maxlength="40">
+    <input type="number" name="amount" value="${i.amount}" placeholder="금액" step="1" required style="text-align:right">
+    ${rec ? `<div class="scope"><b>자동 입력 '${esc(rec.title)}' — 금액을 바꾸면 적용 범위</b>
+      <label><input type="radio" name="scope" value="only" checked> 이 달(${monthLabel(rm)}) 내역만</label>
+      <label><input type="radio" name="scope" value="this"> ${monthLabel(rm)}부터 계속</label>
+      <label><input type="radio" name="scope" value="next"> ${monthLabel(shiftMonth(rm, 1))}부터 계속</label></div>` : ''}
+    <div class="foot"><small>${i.id ? '분류를 바꾸면 그 블록으로 옮겨집니다' : '이 분류로 새 내역을 추가합니다'}</small>
+      <span class="filters"><button type="button" class="btn sm" data-act="cancel">취소</button><button class="btn sm primary">${i.id ? '저장' : '추가'}</button></span></div>
+  </form>`;
+}
+
+const homeEl = $('tab-home');
+homeEl.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]'); if (!el || e.target.closest('input, select')) return;
+  const act = el.dataset.act;
+  const blk = el.closest('.blk'), key = blk?.dataset.key;
+  const id = el.closest('.li')?.dataset.id;
+  const it = id ? state.items.find(i => String(i.id) === id) : null;
+  if (act === 'toggle') { home.open = home.open === key ? null : key; home.edit = null; }
+  else if (act === 'others') home.others[el.dataset.type] = true;
+  else if (act === 'all') home.all.add(key);
+  else if (act === 'new') { e.stopPropagation(); home.edit = 'new'; }
+  else if (act === 'cancel') home.edit = null;
+  else if (act === 'add-any') { const t = el.dataset.type; home.open = `${t}:${CATS[t][0]}`; home.edit = 'new'; }
+  else if (act === 'edit' && it) { home.open = key; home.edit = it.id; }
+  else if (act === 'del' && it) { if (!(await deleteItem(it))) return; home.edit = null; }
+  else return;
+  renderHome();
+  if (act === 'new' || act === 'edit' || act === 'add-any') document.querySelector('#tab-home form.ed [name=amount]')?.focus();
+});
+homeEl.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.name === 'type' && t.form?.classList.contains('ed')) { t.form.category.innerHTML = catOptions(t.value); return; }
+  if (t.dataset.budget) {
+    const c = t.dataset.budget, isA = ANNUAL_CATS.includes(c), m = $('month').value;
+    try { await run('예산 저장', () => setBudget(isA ? 'year' : 'month', isA ? m.slice(0, 4) : m, c, Math.max(0, Math.round(+t.value || 0)))); } catch {}
+    renderHome();
+  }
+});
+homeEl.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, fd = new FormData(f);
+  const item = { date: fd.get('date'), type: fd.get('type'), category: fd.get('category'), user: +fd.get('user'),
+    memo: String(fd.get('memo')).trim(), method: String(fd.get('method')).trim(), amount: Math.round(+fd.get('amount')) };
+  if (!item.amount || !item.date) return toast('날짜와 금액을 입력하세요');
+  const btn = f.querySelector('button.primary'); btn.disabled = true;
+  try {
+    if (!f.dataset.id) {
+      await run('추가', () => addEntries([{ ...item, source: 'manual' }]));
+    } else {
+      const orig = state.items.find(i => String(i.id) === f.dataset.id);
+      const rec = orig.recurring_id && state.recurring.find(r => r.id === orig.recurring_id);
+      const scope = fd.get('scope') || 'only';
+      const keep = { recurring_id: orig.recurring_id, rec_month: orig.rec_month, source: orig.source, time: orig.time };
+      await run('저장', async () => {
+        if (rec && scope !== 'only' && item.amount !== orig.amount) {
+          // 이 내역의 다른 칸은 그대로 저장, 금액은 고정 항목 금액 변경으로 처리
+          const from = scope === 'this' ? orig.rec_month : shiftMonth(orig.rec_month, 1);
+          await updateEntry(orig.id, { ...item, ...keep, amount: orig.amount });
+          await changeRecurringAmount(rec, item.amount, from);
+        } else {
+          await updateEntry(orig.id, { ...item, ...keep });
+        }
+      });
+      if (rec && scope !== 'only' && item.amount !== orig.amount)
+        toast(`'${rec.title}' ${monthLabel(scope === 'this' ? orig.rec_month : shiftMonth(orig.rec_month, 1))}부터 ${won(item.amount)}`);
+    }
+    learnRule(item.memo, item.category);
+    home.edit = null;
+    if (item.type + ':' + item.category !== home.open) home.open = `${item.type}:${item.category}`;
+    if (!item.date.startsWith($('month').value)) { $('month').value = item.date.slice(0, 7); }
+    renderAll();
+  } catch { btn.disabled = false; }
+});
 
 /* ---------- 내역 ---------- */
 function setValue(id, n) { $(id).textContent = (n < 0 ? '-' : '') + fmt(n); }
@@ -373,12 +565,28 @@ function renderLedger() {
     return `<tr data-id="${i.id}">
       <td class="d">${i.date.slice(5).replace('-', '.')}${i.time ? `<small>${i.time}</small>` : ''}</td>
       <td class="t"><b>${esc(i.category)}</b><span class="memo">${esc(i.memo)}</span>
-        <small>${userBadge(i.user)} · ${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${refund ? ' · <span class="chip">취소/환불</span>' : ''}${i.recurring_id ? ' · <span class="chip solid">고정</span>' : ''}</small></td>
+        <small>${userBadge(i.user)} · ${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${refund ? ' · <span class="chip">취소/환불</span>' : ''}${srcTag(i) ? ' · ' + srcTag(i) : ''}</small></td>
       <td class="num amt ${refund ? 'refund' : i.type}">${fmt(i.amount)}</td>
       <td class="act"><button data-act="edit" title="수정">✎</button><button data-act="del" title="삭제">✕</button></td>
     </tr>`;
   }).join('') : '<tr><td colspan="4" class="empty">이 달의 내역이 없습니다</td></tr>';
 }
+const srcTag = i => i.source === 'auto' || i.recurring_id ? '<span class="chip solid">자동</span>'
+  : i.source === 'sms' ? '<span class="chip">문자</span>' : '';
+
+// 삭제 (자동 내역이면 그 달은 다시 생성되지 않게 기록)
+async function deleteItem(it) {
+  const rec = it.recurring_id && state.recurring.find(r => r.id === it.recurring_id);
+  if (!confirm(rec ? `자동 입력 '${rec.title}'의 ${monthLabel(it.rec_month)} 내역입니다.\n삭제하면 이 달에는 다시 생기지 않습니다. 삭제할까요?` : `'${it.memo || it.category}' ${won(it.amount)} 내역을 삭제할까요?`)) return false;
+  try {
+    await run('삭제', async () => {
+      await deleteEntry(it.id);
+      if (rec && !rec.skips.includes(it.rec_month)) await saveRecurring({ ...rec, skips: [...rec.skips, it.rec_month] });
+    });
+    return true;
+  } catch { return false; }
+}
+
 $('fUser').addEventListener('change', renderLedger);
 $('fType').addEventListener('change', renderLedger);
 
@@ -401,7 +609,7 @@ $('form').addEventListener('submit', async e => {
   const item = {
     date: $('fmDate').value, time: $('fmTime').value, type: $('fmType').value, category: $('fmCat').value,
     user: +$('fmUser').value, method: $('fmMethod').value.trim(), memo: $('fmMemo').value.trim(), amount,
-    recurring_id: orig?.recurring_id, rec_month: orig?.rec_month
+    recurring_id: orig?.recurring_id, rec_month: orig?.rec_month, source: orig?.source || 'manual'
   };
   $('fmSubmit').disabled = true;
   try {
@@ -416,15 +624,7 @@ $('list').addEventListener('click', async e => {
   const id = +e.target.closest('tr').dataset.id;
   const it = state.items.find(i => i.id === id); if (!it) return;
   if (act === 'del') {
-    const rec = it.recurring_id && state.recurring.find(r => r.id === it.recurring_id);
-    if (!confirm(rec ? `고정 항목 '${rec.title}'의 ${monthLabel(it.rec_month)} 내역입니다.\n삭제하면 이 달에는 다시 생기지 않습니다. 삭제할까요?` : '이 내역을 삭제할까요?')) return;
-    try {
-      await run('삭제', async () => {
-        await deleteEntry(id);
-        if (rec && !rec.skips.includes(it.rec_month)) await saveRecurring({ ...rec, skips: [...rec.skips, it.rec_month] });
-      });
-      renderAll();
-    } catch {}
+    if (await deleteItem(it)) renderAll();
   } else {
     editingId = id;
     $('fmDate').value = it.date; $('fmTime').value = it.time || '';
@@ -592,7 +792,7 @@ $('smsAdd').onclick = async () => {
     const amount = Math.round(+f('amount').value);
     if (!amount || !f('date').value) return;
     items.push({ date: f('date').value, time: parsed[+tr.dataset.i].time, type: f('type').value, category: f('category').value,
-      user: +f('user').value, method: f('method').value.trim(), memo: f('memo').value.trim(), amount });
+      user: +f('user').value, method: f('method').value.trim(), memo: f('memo').value.trim(), amount, source: 'sms' });
   });
   if (!items.length) return toast('추가할 항목을 선택하세요');
   $('smsAdd').disabled = true;
