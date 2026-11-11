@@ -76,14 +76,38 @@ function shiftMonth(m, d) { const [y, mo] = m.split('-').map(Number); const dt =
 const barClass = pct => pct > 100 ? 'over' : pct >= 80 ? 'warn' : 'ok';
 const bar = (pct, pace) => `<div class="bar ${barClass(pct)}"><span style="width:${Math.min(100, Math.max(0, pct)).toFixed(1)}%"></span>${pace != null ? `<i class="pace" style="left:${pace}%"></i>` : ''}</div>`;
 
-let toastTimer;
-function toast(msg) {
-  const t = $('toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+let toastTimer, toastHandler = null;
+// 알림. action 이 있으면 '되돌리기' 같은 버튼을 함께 보여줌
+function toast(msg, action) {
+  const t = $('toast'), b = $('toastAction');
+  $('toastMsg').textContent = msg; t.hidden = false;
+  toastHandler = action?.onClick || null;
+  b.hidden = !action; b.textContent = action?.label || '';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastHandler = null; }, action ? 6000 : 3500);
+}
+$('toastAction').onclick = () => { const h = toastHandler; $('toast').hidden = true; toastHandler = null; h?.(); };
+
+// 마지막 동기화 시각 표시 ("방금", "3분 전")
+let syncState = 'idle';
+function agoText(t) {
+  const s = Math.round((Date.now() - t) / 1000);
+  return s < 60 ? '방금' : s < 3600 ? `${Math.floor(s / 60)}분 전` : `${Math.floor(s / 3600)}시간 전`;
 }
 function setSync(text, kind = 'ok') {
+  syncState = kind;
   $('sync').className = 'sync ' + kind;
-  $('sync').querySelector('span').textContent = text;
+  $('sync').querySelector('span').textContent = kind === 'ok' && lastLoad ? `동기화됨 · ${agoText(lastLoad)} ↻` : text;
+}
+setInterval(() => { if (syncState === 'ok' && sb) setSync(''); }, 30000);
+
+// 사람이 읽기 쉬운 오류 문구
+function friendlyError(e) {
+  const msg = String(e?.message || e || '');
+  if (e instanceof TypeError || /fetch|network|Load failed/i.test(msg)) return '인터넷 연결을 확인해 주세요.';
+  if (e?.code === '42501' || /permission|row-level/i.test(msg)) return '권한이 없어 저장하지 못했어요.';
+  if (e?.code === '23505') return '이미 같은 내용이 있어요.';
+  if (e?.code === '23514' || e?.code === '22001') return '입력한 내용이 너무 길거나 올바르지 않아요.';
+  return '잠시 후 다시 시도해 주세요.';
 }
 
 /* ---------- 상태 ---------- */
@@ -151,8 +175,8 @@ async function loadAll() {
 // 저장 작업 공통 처리: 상태 표시 + 오류 알림
 async function run(label, fn) {
   setSync('저장 중…', 'busy');
-  try { const r = await fn(); setSync('동기화됨'); return r; }
-  catch (e) { console.error(e); setSync('오류', 'err'); toast(`${label} 실패: ${e.message || e}`); throw e; }
+  try { const r = await fn(); lastLoad = Date.now(); setSync('동기화됨'); return r; }
+  catch (e) { console.error(e); setSync('저장 안 됨 · 눌러서 다시 시도', 'err'); toast(`${label} 실패 — ${friendlyError(e)}`); throw e; }
 }
 
 async function addEntries(items) {
@@ -340,12 +364,21 @@ function refreshMethods() {
 
 /* ---------- 탭 / 월 ---------- */
 let currentTab = 'home';
-document.querySelector('.tabs').addEventListener('click', e => {
-  const t = e.target.dataset.tab; if (!t) return;
+function switchTab(t) {
   currentTab = t;
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.bottombar [data-tab]').forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === t || (b.dataset.group || '').split(' ').includes(t)));
   document.querySelectorAll('section[id^="tab-"]').forEach(s => s.hidden = s.id !== 'tab-' + t);
+  window.scrollTo(0, 0);
   renderAll();
+}
+// 아래쪽 탭, 더보기 메뉴, '‹ 더보기' 버튼
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab], button[data-act="manual"], button[data-act="install"]');
+  if (!b || b.closest('#tab-home')) return;
+  if (b.dataset.tab) switchTab(b.dataset.tab);
+  else if (b.dataset.act === 'manual') openHelp();
+  else if (b.dataset.act === 'install') installApp();
 });
 $('prevM').onclick = () => { $('month').value = shiftMonth($('month').value, -1); renderAll(); };
 $('nextM').onclick = () => { $('month').value = shiftMonth($('month').value, 1); renderAll(); };
@@ -440,7 +473,7 @@ function blockHtml(type, x, total, m, yearSpent) {
       <span class="dt">${i.date.slice(5).replace('-', '.')}</span>
       <span class="nm">${esc(i.memo || i.category)}</span>${srcTag(i)}${i.type === 'expense' && i.amount < 0 ? '<span class="chip">환불</span>' : ''}
       <span class="who">${esc(state.users[i.user] ?? '')}${i.method ? ' · ' + esc(i.method) : ''}</span>
-      <span class="amt">${i.amount < 0 ? '+' : ''}${fmt(i.amount)}</span>
+      <span class="amt ${i.type}">${i.amount < 0 ? '+' : ''}${fmt(i.amount)}</span>
       <button class="ib" data-act="${editing ? 'cancel' : 'edit'}" title="${editing ? '닫기' : '수정'}">${editing ? '✕' : '✎'}</button>
       ${open ? `<button class="ib" data-act="del" title="삭제">🗑</button>` : ''}
     </div>${editing ? editForm(i) : ''}`;
@@ -612,17 +645,32 @@ function renderLedger() {
 const srcTag = i => i.source === 'auto' || i.recurring_id ? '<span class="chip solid">자동</span>'
   : i.source === 'sms' ? '<span class="chip">문자</span>' : '';
 
-// 삭제 (자동 내역이면 그 달은 다시 생성되지 않게 기록)
+// 삭제 → 아래에 '되돌리기' 6초 표시 (자동 내역이면 그 달은 다시 생성되지 않게 기록)
 async function deleteItem(it) {
   const rec = it.recurring_id && state.recurring.find(r => r.id === it.recurring_id);
-  if (!confirm(rec ? `자동 입력 '${rec.title}'의 ${monthLabel(it.rec_month)} 내역입니다.\n삭제하면 이 달에는 다시 생기지 않습니다. 삭제할까요?` : `'${it.memo || it.category}' ${won(it.amount)} 내역을 삭제할까요?`)) return false;
+  const skipAdded = rec && !rec.skips.includes(it.rec_month);
   try {
     await run('삭제', async () => {
       await deleteEntry(it.id);
-      if (rec && !rec.skips.includes(it.rec_month)) await saveRecurring({ ...rec, skips: [...rec.skips, it.rec_month] });
+      if (skipAdded) await saveRecurring({ ...rec, skips: [...rec.skips, it.rec_month] });
     });
-    return true;
   } catch { return false; }
+  toast(`'${it.memo || it.category}' ${won(Math.abs(it.amount))} 삭제했어요`, {
+    label: '되돌리기',
+    onClick: async () => {
+      try {
+        await run('되돌리기', async () => {
+          const { id, ...rest } = it;
+          await addEntries([rest]);
+          const cur = rec && state.recurring.find(r => r.id === rec.id);
+          if (skipAdded && cur) await saveRecurring({ ...cur, skips: cur.skips.filter(m => m !== it.rec_month) });
+        });
+        toast('되돌렸어요');
+      } catch {}
+      renderAll();
+    }
+  });
+  return true;
 }
 
 $('fUser').addEventListener('change', renderLedger);
@@ -841,7 +889,7 @@ $('smsAdd').onclick = async () => {
     $('month').value = items[items.length - 1].date.slice(0, 7);
     parsed = []; $('smsText').value = ''; $('smsResultCard').hidden = true;
     toast(`${items.length}건을 추가했습니다`);
-    document.querySelector('.tabs [data-tab=ledger]').click();
+    switchTab('ledger');
   } catch {} finally { $('smsAdd').disabled = false; }
 };
 
@@ -1149,7 +1197,7 @@ async function connect(key) {
   } catch (e) {
     console.error(e);
     if (e.code === 'NOT_FOUND') { lsSet(KEY_STORE, null); showGate('이 키로 된 가계부가 없습니다. 키를 다시 확인하세요.'); }
-    else { $('gateKey').value = key; showGate(`연결하지 못했습니다: ${e.message || e}`); }
+    else { $('gateKey').value = key; showGate(`연결하지 못했습니다. ${friendlyError(e)}`); }
     return false;
   }
   lsSet(KEY_STORE, key);
@@ -1181,7 +1229,7 @@ $('reqForm').addEventListener('submit', async e => {
       ? `${email} 로 이미 신청이 접수되어 있습니다. 관리자 확인을 기다려 주세요.`
       : `관리자가 확인한 뒤 ${email} 로 가계부 키를 보내드립니다.`;
   } catch (err) {
-    $('reqMsg').textContent = err.message || '요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    $('reqMsg').textContent = err instanceof TypeError ? friendlyError(err) : (err.message || '요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.');
     $('reqSubmit').disabled = false;
   }
 });
@@ -1192,12 +1240,134 @@ $('gateJoin').onclick = () => {
 };
 $('gateKey').addEventListener('keydown', e => { if (e.key === 'Enter') $('gateJoin').click(); });
 
-// 다른 가족이 입력한 내용 반영: 창으로 돌아올 때 다시 불러오기
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || !sb || Date.now() - lastLoad < 20000) return;
-  try { setSync('불러오는 중…', 'busy'); await loadAll(); await generateRecurring(); setSync('동기화됨'); refreshUserSelects(); renderAll(); }
-  catch (e) { console.error(e); setSync('오류', 'err'); }
+/* ---------- 다른 가족이 입력한 내용 반영 (새로고침) ---------- */
+let refreshing = false;
+// 입력 중이면 자동 새로고침은 건너뜀 (적던 내용이 사라지지 않게)
+const isBusyEditing = () => home.edit != null || editingId != null ||
+  [...document.querySelectorAll('dialog')].some(d => d.open) ||
+  /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+async function refresh({ auto = false } = {}) {
+  if (!sb || refreshing || (auto && isBusyEditing())) return;
+  refreshing = true;
+  try {
+    setSync('불러오는 중…', 'busy');
+    await loadAll(); await generateRecurring();
+    setSync('동기화됨'); refreshUserSelects(); renderAll();
+    if (!auto) toast('최신 내용으로 새로고침했어요');
+  } catch (e) { console.error(e); setSync('연결 안 됨 · 눌러서 다시 시도', 'err'); if (!auto) toast(friendlyError(e)); }
+  finally { refreshing = false; }
+}
+$('sync').onclick = () => refresh();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastLoad > 20000) refresh({ auto: true });
 });
+setInterval(() => { if (document.visibilityState === 'visible') refresh({ auto: true }); }, 60000);
+
+// 다이얼로그 바깥(어두운 배경)을 눌렀는지
+function outsideDialog(e, d) {
+  if (e.target !== d) return false;
+  const r = d.getBoundingClientRect();
+  return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+}
+
+/* ---------- ＋ 빠른 추가 ---------- */
+let qaType = 'expense', qaCat = null, qaShowAll = false;
+function catsByUse(type) {   // 최근 90일 많이 쓴 분류 순서
+  const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10), n = {};
+  state.items.forEach(i => { if (i.type === type && i.date >= since) n[i.category] = (n[i.category] || 0) + 1; });
+  return [...CATS[type]].sort((a, b) => (n[b] || 0) - (n[a] || 0) || CATS[type].indexOf(a) - CATS[type].indexOf(b));
+}
+function renderQaCats() {
+  const list = catsByUse(qaType), shown = qaShowAll ? list : list.slice(0, 8);
+  if (!list.includes(qaCat)) qaCat = list[0];
+  if (!shown.includes(qaCat)) shown.push(qaCat);
+  $('qaCats').innerHTML = shown.map(c => `<button type="button" data-c="${esc(c)}" class="${c === qaCat ? 'on' : ''}">${esc(c)}</button>`).join('') +
+    (list.length > shown.length ? `<button type="button" class="more" data-c="__all">전체 ${list.length}개 ▾</button>` : '');
+}
+function setQaType(t) {
+  qaType = t; qaShowAll = false; qaCat = null;
+  document.querySelectorAll('#qaType button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+  renderQaCats();
+}
+function openQuickAdd() {
+  $('qaForm').reset(); $('qaMsg').textContent = '';
+  $('qaDate').value = $('month').value === thisMonth() ? todayISO() : `${$('month').value}-01`;
+  $('qaUser').innerHTML = userOptions(defaultUser()); applyUserLock($('qaUser'), null);
+  const memos = [...new Set(state.items.slice().sort((a, b) => b.id - a.id).map(i => i.memo).filter(Boolean))].slice(0, 40);
+  $('memoList').innerHTML = memos.map(m => `<option value="${esc(m)}">`).join('');
+  setQaType('expense');
+  $('qaDlg').showModal();
+  setTimeout(() => $('qaAmount').focus(), 50);
+}
+$('fab').onclick = openQuickAdd;
+$('qaType').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v) setQaType(v); });
+$('qaCats').addEventListener('click', e => {
+  const c = e.target.closest('button')?.dataset.c; if (!c) return;
+  if (c === '__all') qaShowAll = true; else qaCat = c;
+  renderQaCats();
+});
+// 금액: 숫자만 받아서 12,000 처럼 표시
+$('qaAmount').addEventListener('input', e => {
+  const d = e.target.value.replace(/[^\d]/g, '').replace(/^0+/, '').slice(0, 12);
+  e.target.value = d ? (+d).toLocaleString('ko-KR') : '';
+});
+// 가게 이름을 넣으면 예전에 고른 분류를 자동 선택
+$('qaMemo').addEventListener('input', e => {
+  const r = state.rules[e.target.value.trim()];
+  if (r && CATS[qaType].includes(r)) { qaCat = r; renderQaCats(); }
+});
+$('qaDlg').addEventListener('click', e => {
+  const a = e.target.closest('[data-qa]')?.dataset.qa;
+  if (a === 'close') $('qaDlg').close();
+  if (a === 'sms') { $('qaDlg').close(); switchTab('sms'); }
+  if (outsideDialog(e, $('qaDlg'))) $('qaDlg').close();   // 바깥 누르면 닫기
+});
+$('qaForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const amount = +$('qaAmount').value.replace(/[^\d]/g, '');
+  if (!amount) { $('qaMsg').textContent = '금액을 넣어 주세요.'; $('qaAmount').focus(); return; }
+  if (!$('qaDate').value) { $('qaMsg').textContent = '날짜를 골라 주세요.'; return; }
+  const item = { date: $('qaDate').value, time: '', type: qaType, category: qaCat, user: +$('qaUser').value,
+    method: '', memo: $('qaMemo').value.trim(), amount, source: 'manual' };
+  $('qaSave').disabled = true;
+  try {
+    await run('저장', () => addEntries([item]));
+    learnRule(item.memo, item.category);
+    $('qaDlg').close();
+    if (!item.date.startsWith($('month').value)) $('month').value = item.date.slice(0, 7);
+    renderAll();
+    toast(`${item.category} ${won(amount)} 저장했어요`);
+  } catch {} finally { $('qaSave').disabled = false; }
+});
+
+/* ---------- 문자 붙여넣기 ---------- */
+$('smsPaste').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t.trim()) return toast('복사된 문자가 없어요. 문자를 길게 눌러 복사해 주세요.');
+    $('smsText').value = t; $('smsParse').click();
+  } catch { toast('붙여넣기 권한이 없어요. 입력 칸을 길게 눌러 붙여넣어 주세요.'); $('smsText').focus(); }
+};
+
+/* ---------- 사용법 ---------- */
+function openHelp() { $('helpDlg').showModal(); $('helpDlg').scrollTop = 0; }
+$('helpBtn').onclick = openHelp;
+$('helpDlg').addEventListener('click', e => {
+  if (e.target.closest('[data-help=close]') || outsideDialog(e, $('helpDlg'))) $('helpDlg').close();
+});
+
+/* ---------- 홈 화면 앱(PWA) ---------- */
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('installBtn').hidden = false; });
+window.addEventListener('appinstalled', () => { installPrompt = null; $('installBtn').hidden = true; toast('홈 화면에 설치했어요'); });
+async function installApp() {
+  if (!installPrompt) return openHelp();
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null; $('installBtn').hidden = true;
+}
+if ('serviceWorker' in navigator && location.protocol !== 'file:')
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e));
 
 (function start() {
   $('fmDate').value = todayISO();
