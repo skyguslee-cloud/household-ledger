@@ -18,7 +18,9 @@ const ANNUAL_CATS = ['여행/숙박', '경조/선물', '미용', '의류쇼핑']
 const MONTHLY_CATS = CATS.expense.filter(c => !ANNUAL_CATS.includes(c));
 // 없어진 분류 → 합쳐질 분류
 const RENAMED = { '술/유흥': '문화/여가' };
-const DEFAULT_USERS = ['user1', 'user2', 'user3', 'user4', 'user5'];
+const DEFAULT_USERS = ['chiyong', 'hyun', 'juha', 'seoha', 'user5'];
+// 다른 사람 이름으로도 입력할 수 있는 사용자 (0부터: 1 = user2 hyun)
+const CAN_ENTER_FOR_OTHERS = [1];
 
 // 사용처 키워드 → 분류 (위에서부터 먼저 맞는 것 사용, '^'는 앞부분 일치)
 const KEYWORDS = {
@@ -288,12 +290,49 @@ const userOptions = (sel, all) => (all ? '<option value="">전체 사용자</opt
   state.users.map((n, i) => `<option value="${i}"${String(sel) === String(i) ? ' selected' : ''}>${esc(n)}</option>`).join('');
 const userBadge = u => `<span class="user u${u}"><i>${u + 1}</i>${esc(state.users[u] ?? 'user' + (u + 1))}</span>`;
 
+/* ---------- 이 기기 사용자 (누구세요?) ---------- */
+const ME_STORE = 'ledger-me';
+const me = () => { const v = lsGet(ME_STORE); return v == null || v === '' ? null : Math.min(4, Math.max(0, +v)); };
+const canPickUser = () => CAN_ENTER_FOR_OTHERS.includes(me());
+const defaultUser = () => me() ?? 0;
+const LOCK_TITLE = '다른 사람 이름으로 입력하려면 권한이 필요합니다';
+const lockAttr = () => canPickUser() ? '' : ` disabled title="${LOCK_TITLE}"`;
+// 사용자 선택칸: 권한이 없으면 본인(수정 중이면 그 내역의 주인)으로 고정
+function applyUserLock(el, owner) {
+  el.value = owner ?? defaultUser();
+  el.disabled = !canPickUser();
+  el.title = el.disabled ? LOCK_TITLE : '';
+}
+function setOwner(el, owner) {
+  if (owner == null) delete el.dataset.owner; else el.dataset.owner = owner;
+  applyUserLock(el, owner);
+}
 function refreshUserSelects() {
   $('fUser').innerHTML = userOptions($('fUser').value, true);
-  $('fmUser').innerHTML = userOptions($('fmUser').value || 0);
-  $('smsUser').innerHTML = userOptions($('smsUser').value || 0);
-  $('rcUser').innerHTML = userOptions($('rcUser').value || 0);
+  for (const id of ['fmUser', 'smsUser', 'rcUser']) {
+    const el = $(id), owner = el.dataset.owner != null ? +el.dataset.owner : null;
+    el.innerHTML = userOptions(owner ?? defaultUser());
+    applyUserLock(el, owner);
+  }
+  const m = me();
+  $('meBtn').hidden = false;
+  $('meBtn').innerHTML = m == null ? '누구세요?' : `${userBadge(m)}${canPickUser() ? ' <small>· 모두 입력 가능</small>' : ''}`;
 }
+function openMeDialog(first = false) {
+  $('meChoices').innerHTML = state.users.map((n, i) =>
+    `<button class="btn${me() === i ? ' primary' : ''}" value="${i}">${userBadge(i)}</button>`).join('');
+  $('meDlg').dataset.first = first ? '1' : '';
+  $('meDlg').showModal();
+}
+$('meBtn').onclick = () => openMeDialog();
+$('meDlg').addEventListener('cancel', e => { if ($('meDlg').dataset.first) e.preventDefault(); });   // 처음엔 꼭 선택
+$('meDlg').addEventListener('close', () => {
+  const v = $('meDlg').returnValue;
+  if (v === '' || v == null || isNaN(+v)) return;
+  lsSet(ME_STORE, String(+v));
+  refreshUserSelects(); renderAll();
+  toast(`${state.users[+v]} 님으로 입력합니다`);
+});
 function refreshMethods() {
   const set = new Set([...state.items.map(i => i.method), ...state.recurring.map(r => r.method)].filter(Boolean));
   $('methodList').innerHTML = [...set, '현금', '계좌이체'].map(m => `<option value="${esc(m)}">`).join('');
@@ -415,7 +454,7 @@ function blockHtml(type, x, total, m, yearSpent) {
     <div class="blk-total" data-act="toggle">${x.sum < 0 ? '-' : ''}${fmt(x.sum)}</div>
     <div class="blk-sub">${sub}</div>
     ${barHtml}
-    ${home.edit === 'new' && open ? editForm({ date: defaultDateFor(m), type, category: x.c, user: 0, method: '', memo: '', amount: '' }) : ''}
+    ${home.edit === 'new' && open ? editForm({ date: defaultDateFor(m), type, category: x.c, user: defaultUser(), method: '', memo: '', amount: '' }) : ''}
     ${rows || (open ? '' : '<div class="li"><span class="nm" style="color:var(--muted)">아직 내역이 없습니다</span></div>')}
     ${hidden ? `<div class="li morebtn" data-act="${open ? 'all' : 'toggle'}">나머지 ${hidden}건 더 보기 ▾</div>` : ''}
   </div>`;
@@ -429,7 +468,7 @@ function editForm(i) {
     <input type="date" name="date" value="${i.date}" required>
     <select name="type">${typeOptions(i.type)}</select>
     <select name="category">${catOptions(i.type, i.category)}</select>
-    <select name="user">${userOptions(i.user)}</select>
+    <select name="user"${lockAttr()}>${userOptions(i.user)}</select>
     <input name="memo" value="${esc(i.memo)}" placeholder="내용 / 사용처" maxlength="200">
     <input name="method" value="${esc(i.method)}" placeholder="결제수단" list="methodList" maxlength="40">
     <input type="number" name="amount" value="${i.amount}" placeholder="금액" step="1" required style="text-align:right">
@@ -473,7 +512,10 @@ homeEl.addEventListener('change', async e => {
 homeEl.addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target, fd = new FormData(f);
-  const item = { date: fd.get('date'), type: fd.get('type'), category: fd.get('category'), user: +fd.get('user'),
+  // 잠긴(disabled) 사용자 칸은 FormData에 안 들어오므로 주인/본인으로 채움
+  const owner = f.dataset.id ? state.items.find(i => String(i.id) === f.dataset.id)?.user : defaultUser();
+  const item = { date: fd.get('date'), type: fd.get('type'), category: fd.get('category'),
+    user: fd.has('user') ? +fd.get('user') : (owner ?? defaultUser()),
     memo: String(fd.get('memo')).trim(), method: String(fd.get('method')).trim(), amount: Math.round(+fd.get('amount')) };
   if (!item.amount || !item.date) return toast('날짜와 금액을 입력하세요');
   const btn = f.querySelector('button.primary'); btn.disabled = true;
@@ -595,6 +637,7 @@ function resetForm() {
   editingId = null;
   $('formTitle').textContent = '내역 추가'; $('fmSubmit').textContent = '추가'; $('fmCancel').hidden = true;
   $('fmMemo').value = ''; $('fmAmount').value = ''; $('fmTime').value = '';
+  setOwner($('fmUser'), null);
 }
 $('fmCancel').onclick = resetForm;
 $('form').addEventListener('submit', async e => {
@@ -625,7 +668,7 @@ $('list').addEventListener('click', async e => {
     editingId = id;
     $('fmDate').value = it.date; $('fmTime').value = it.time || '';
     $('fmType').value = it.type; fillFormCats(it.category);
-    $('fmUser').value = it.user; $('fmMethod').value = it.method || '';
+    setOwner($('fmUser'), it.user); $('fmMethod').value = it.method || '';
     $('fmMemo').value = it.memo; $('fmAmount').value = it.amount;
     $('formTitle').textContent = '내역 수정'; $('fmSubmit').textContent = '수정'; $('fmCancel').hidden = false;
     $('form').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -767,7 +810,7 @@ function renderParsed() {
     <td><input type="date" data-f="date" value="${p.date}" style="min-width:130px"></td>
     <td><select data-f="type">${typeOptions(p.type)}</select></td>
     <td><select data-f="category" style="min-width:110px">${catOptions(p.type, p.category)}</select></td>
-    <td><select data-f="user">${userOptions(p.user)}</select></td>
+    <td><select data-f="user"${lockAttr()}>${userOptions(p.user)}</select></td>
     <td><input data-f="method" value="${esc(p.method)}" list="methodList" style="min-width:100px"></td>
     <td><input data-f="memo" value="${esc(p.memo)}" style="min-width:110px"></td>
     <td><input type="number" data-f="amount" value="${p.amount}" style="min-width:90px;text-align:right"></td>
@@ -916,6 +959,7 @@ function resetRecForm() {
   $('rcTitle').placeholder = '이름 (예: 월급)';
   $('recFormTitle').textContent = '새 고정 항목'; $('rcSubmit').textContent = '등록'; $('rcCancel').hidden = true;
   document.querySelectorAll('.rc-new').forEach(el => { el.hidden = false; el.required = el.id === 'rcAmount'; });
+  setOwner($('rcUser'), null);
 }
 $('rcCancel').onclick = resetRecForm;
 
@@ -972,7 +1016,7 @@ $('recList').addEventListener('click', async e => {
   if (op === 'edit') {
     recEditing = r.id;
     $('rcTitle').value = r.title; $('rcType').value = r.type; fillRecCats(r.category);
-    $('rcUser').value = r.user; $('rcDay').value = r.day; $('rcMethod').value = r.method;
+    setOwner($('rcUser'), r.user); $('rcDay').value = r.day; $('rcMethod').value = r.method;
     document.querySelectorAll('.rc-new').forEach(el => { el.hidden = true; el.required = false; });
     $('recFormTitle').textContent = `'${r.title}' 수정 · 금액은 [금액 변경]에서`; $('rcSubmit').textContent = '저장'; $('rcCancel').hidden = false;
     $('recForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1077,7 +1121,7 @@ $('exportCsv').onclick = () => {
 };
 $('disconnect').onclick = () => {
   if (!confirm('이 기기에서 가계부 연결을 해제할까요?\n데이터는 DB에 그대로 있고, 키나 초대 링크로 다시 연결할 수 있습니다.')) return;
-  lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
+  lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState();
   showGate();
 };
 $('clearAll').onclick = async () => {
@@ -1090,7 +1134,7 @@ $('clearAll').onclick = async () => {
    연결 / 시작
    ========================================================= */
 function showGate(msg = '') {
-  $('app').hidden = true; $('monthNav').hidden = true; $('gate').hidden = false;
+  $('app').hidden = true; $('monthNav').hidden = true; $('meBtn').hidden = true; $('gate').hidden = false;
   $('gateMsg').textContent = msg;
   setSync('연결 안 됨', '');
 }
@@ -1110,6 +1154,7 @@ async function connect(key) {
   }
   lsSet(KEY_STORE, key);
   showApp(); refreshUserSelects(); resetRecForm();
+  if (me() == null) openMeDialog(true);   // 처음 접속: 누구인지 고르기
   try { await generateRecurring(); } catch (e) { console.error(e); }
   setSync('동기화됨');
   renderAll();

@@ -17,6 +17,7 @@
         <div class="sync" id="sync"><i></i><span>연결 전</span></div>
       </div>
     </div>
+    <button type="button" class="me-btn" id="meBtn" hidden title="이 기기 사용자 바꾸기"></button>
     <div class="monthnav" id="monthNav">
       <button class="icon" id="prevM" aria-label="이전 달">‹</button>
       <input type="month" id="month">
@@ -273,6 +274,15 @@
       <button class="btn" value="cancel" formnovalidate>취소</button>
       <button class="btn primary" value="ok">변경</button>
     </div>
+  </form>
+</dialog>
+
+<!-- 이 기기 사용자 선택 -->
+<dialog id="meDlg">
+  <form method="dialog">
+    <h2>누구세요?</h2>
+    <p class="muted">이 기기에서 입력하는 내역은 고른 사람 이름으로 자동 기록됩니다. 나중에 위쪽 이름을 눌러 바꿀 수 있어요.</p>
+    <div class="me-grid" id="meChoices"></div>
   </form>
 </dialog>
 
