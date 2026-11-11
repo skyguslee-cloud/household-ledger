@@ -437,7 +437,7 @@ $('month').addEventListener('change', () => { if ($('month').value) renderAll();
 
 function renderAll() {
   refreshMethods();
-  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
+  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
 }
 
 /* ---------- 홈: 분류별 블록 ---------- */
@@ -943,6 +943,95 @@ $('smsAdd').onclick = async () => {
     switchTab('ledger');
   } catch {} finally { $('smsAdd').disabled = false; }
 };
+
+/* ---------- 개인별 통계 ---------- */
+let statUser = null;   // 처음엔 이 기기 사용자
+$('stPeople').addEventListener('click', e => {
+  const b = e.target.closest('button[data-u]'); if (!b) return;
+  statUser = +b.dataset.u; renderStats();
+});
+function renderStats() {
+  const m = $('month').value, pm = shiftMonth(m, -1), y = m.slice(0, 4), mo = +m.slice(5);
+  if (statUser == null || statUser >= state.users.length) statUser = defaultUser();
+  const u = statUser, name = esc(state.users[u] ?? '');
+  const mine = state.items.filter(i => i.user === u && i.type !== 'transfer');
+  const total = (list, t) => sum(list.filter(i => i.type === t).map(i => i.amount));
+  const inMonth = (list, mm) => list.filter(i => i.date.startsWith(mm));
+
+  // 사람 고르기 (이번 달 지출 함께 표시)
+  $('stPeople').innerHTML = state.users.map((n, i) => {
+    const e = total(inMonth(state.items.filter(x => x.user === i), m), 'expense');
+    return `<button type="button" class="btn${i === u ? ' primary' : ''}" data-u="${i}">${userBadge(i)}<small>${e ? fmt(e) + '원' : '내역 없음'}</small></button>`;
+  }).join('');
+
+  // 이번 달 요약
+  const cur = inMonth(mine, m), prev = inMonth(mine, pm);
+  const inc = total(cur, 'income'), exp = total(cur, 'expense'), pExp = total(prev, 'expense');
+  const momTxt = !pExp ? '지난달 지출 없음' : exp === pExp ? '지난달과 같음'
+    : `지난달보다 ${exp > pExp ? '▲' : '▼'} ${fmt(exp - pExp)}원`;
+  const metric = (label, n, sub) => `<div class="metric"><div class="label">${label}</div><div class="value">${(n < 0 ? '-' : '') + fmt(n)}</div>${sub ? `<small class="metric-sub">${sub}</small>` : ''}</div>`;
+  $('stMetrics').innerHTML = metric(`${name} · ${mo}월 수입`, inc) +
+    metric(`${name} · ${mo}월 지출`, exp, `${cur.filter(i => i.type === 'expense').length}건 · ${momTxt}`) +
+    metric(`${name} · 수입 − 지출`, inc - exp);
+
+  // 분류별 지출
+  const byCat = {};
+  cur.filter(i => i.type === 'expense').forEach(i => byCat[i.category] = (byCat[i.category] || 0) + i.amount);
+  const cats = Object.entries(byCat).filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
+  const maxC = Math.max(1, ...cats.map(c => c[1]));
+  $('stCatTitle').textContent = `${mo}월 분류별 지출`;
+  $('stCats').innerHTML = cats.length ? cats.map(([c, v]) => `<div class="row"><span>${esc(c)}</span>
+      ${bar(v / maxC * 100).replace(/bar (ok|over)/, 'bar warn')}
+      <span class="num">${won(v)}<small>${exp > 0 ? (v / exp * 100).toFixed(0) + '%' : ''}</small></span></div>`).join('')
+    : '<div class="empty">이 달 지출이 없습니다</div>';
+
+  // 최근 6개월 (수입/지출)
+  const months = [-5, -4, -3, -2, -1, 0].map(d => shiftMonth(m, d));
+  const tr = months.map(mm => { const l = inMonth(mine, mm); return { mm, inc: total(l, 'income'), exp: total(l, 'expense') }; });
+  const maxT = Math.max(1, ...tr.map(x => x.exp));
+  $('stTrend').innerHTML = tr.map(x => `<div class="row trend${x.mm === m ? ' now' : ''}"><span>${x.mm.slice(2, 4)}년 ${+x.mm.slice(5)}월</span>
+      ${bar(Math.max(0, x.exp) / maxT * 100).replace(/bar (ok|over)/, 'bar warn')}
+      <span class="num">${won(x.exp)}<small>수입 ${fmt(x.inc)}</small></span></div>`).join('');
+
+  // 많이 쓴 곳 TOP 5 (내용/사용처 기준)
+  const byPlace = {};
+  cur.filter(i => i.type === 'expense').forEach(i => {
+    const k = (i.memo || '').trim() || `(${i.category})`;
+    (byPlace[k] ||= { n: 0, v: 0 }); byPlace[k].n++; byPlace[k].v += i.amount;
+  });
+  const top = Object.entries(byPlace).filter(([, x]) => x.v > 0).sort((a, b) => b[1].v - a[1].v).slice(0, 5);
+  const maxP = Math.max(1, ...top.map(([, x]) => x.v));
+  $('stTopTitle').textContent = `${mo}월 많이 쓴 곳 TOP 5`;
+  $('stTop').innerHTML = top.length ? top.map(([k, x]) => `<div class="row"><span class="ell" title="${esc(k)}">${esc(k)}</span>
+      ${bar(x.v / maxP * 100).replace(/bar (ok|over)/, 'bar warn')}<span class="num">${won(x.v)}<small>${x.n}번</small></span></div>`).join('')
+    : '<div class="empty">이 달 지출이 없습니다</div>';
+
+  // 올해 누적
+  const yl = mine.filter(i => i.date.startsWith(y) && i.date.slice(0, 7) <= m);
+  const yInc = total(yl, 'income'), yExp = total(yl, 'expense');
+  const nMonths = y === thisMonth().slice(0, 4) && m > thisMonth() ? +thisMonth().slice(5) : mo;
+  const yCat = {};
+  yl.filter(i => i.type === 'expense').forEach(i => yCat[i.category] = (yCat[i.category] || 0) + i.amount);
+  const yTop = Object.entries(yCat).sort((a, b) => b[1] - a[1])[0];
+  $('stYearTitle').textContent = `${y}년 1~${mo}월`;
+  $('stYear').innerHTML = `<div class="kv"><span>수입 합계</span><b>${won(yInc)}</b></div>
+    <div class="kv"><span>지출 합계</span><b>${won(yExp)}</b></div>
+    <div class="kv"><span>수입 − 지출</span><b>${won(yInc - yExp)}</b></div>
+    <div class="kv"><span>한 달 평균 지출</span><b>${won(Math.round(yExp / Math.max(1, nMonths)))}</b></div>
+    <div class="kv"><span>가장 많이 쓴 분류</span><b>${yTop && yTop[1] > 0 ? `${esc(yTop[0])} · ${won(yTop[1])}` : '—'}</b></div>`;
+
+  // 가족 비교 (이번 달)
+  const fam = state.users.map((n, i) => { const l = inMonth(state.items.filter(x => x.user === i), m); return { i, inc: total(l, 'income'), exp: total(l, 'expense') }; });
+  const famExp = sum(fam.map(x => x.exp));
+  $('stFamTitle').textContent = `${mo}월 가족 비교`;
+  $('stFam').innerHTML = fam.map(x => `<tr class="${x.i === u ? 'sel' : ''}"><td>${userBadge(x.i)}</td>
+      <td class="num">${x.inc ? won(x.inc) : '<small>0원</small>'}</td>
+      <td class="num">${x.exp ? won(x.exp) : '<small>0원</small>'}${famExp > 0 && x.exp > 0 ? `<small class="pct">${(x.exp / famExp * 100).toFixed(0)}%</small>` : ''}</td>
+      <td class="num diff">${x.inc || x.exp ? won(x.inc - x.exp) : '<small>—</small>'}</td>
+      <td class="prog">${famExp > 0 ? bar(Math.max(0, x.exp) / famExp * 100).replace(/bar (ok|over)/, 'bar warn') : ''}</td></tr>`).join('') +
+    `<tr class="tot"><td><b>합계</b></td><td class="num"><b>${won(sum(fam.map(x => x.inc)))}</b></td><td class="num"><b>${won(famExp)}</b></td>
+      <td class="num diff"><b>${won(sum(fam.map(x => x.inc)) - famExp)}</b></td><td class="prog"></td></tr>`;
+}
 
 /* ---------- 예산 ---------- */
 const prevPeriod = (obj, cur) => Object.keys(obj).filter(k => k < cur && Object.keys(obj[k]).length).sort().pop();

@@ -343,3 +343,26 @@ dialog.sheet.tall { max-width: 640px; width: min(640px, 100vw); }
   .help-btn, .me-btn { padding: 5px 10px; font-size: .8rem; }
   .me-btn small { display: none; }
 }
+
+/* ---------- 개인별 통계 ---------- */
+.stat-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.stat-people .btn { flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; }
+.stat-people .btn small { font-weight: 500; }
+.stat-people .btn.primary small { color: var(--inv); opacity: .8; }
+.stat-people .btn.primary .user i { border-color: var(--inv); }
+#tab-stats .metrics { margin-bottom: 14px; }
+.metric-sub { display: block; margin-top: 4px; }
+.row.trend.now > span:first-child { font-weight: 700; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.kv:last-child { border-bottom: none; }
+.kv span { color: var(--muted); }
+.kv b { text-align: right; font-variant-numeric: tabular-nums; }
+.stat-fam tr.sel td { background: var(--soft); }
+.stat-fam tr.tot td { border-top: 1px solid var(--strong); }
+.stat-fam .pct { display: block; }
+@media (max-width: 680px) {
+  .metric-sub { display: none; }
+  .stat-people { grid-template-columns: 1fr 1fr; }
+  .stat-fam .diff, .stat-fam .prog { display: none; }
+}
