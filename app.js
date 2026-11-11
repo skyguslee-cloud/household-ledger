@@ -1149,23 +1149,7 @@ document.addEventListener('visibilitychange', async () => {
   catch (e) { console.error(e); setSync('오류', 'err'); }
 });
 
-/* ---------- 대문 폭죽 (3번) ---------- */
-function celebrate() {
-  if (typeof confetti !== 'function') return;
-  const shots = [
-    { origin: { x: 0.2, y: 0.6 }, angle: 60 },
-    { origin: { x: 0.8, y: 0.6 }, angle: 120 },
-    { origin: { x: 0.5, y: 0.7 }, angle: 90 }
-  ];
-  shots.forEach((s, i) => setTimeout(() => confetti({
-    ...s, particleCount: 120, spread: 80, startVelocity: 55, ticks: 220, scalar: 1.1,
-    disableForReducedMotion: true
-  }), i * 700));
-}
-$('cheer').onclick = celebrate;
-
 (function start() {
-  setTimeout(celebrate, 300);
   $('fmDate').value = todayISO();
   $('month').value = thisMonth();
   fillFormCats();
