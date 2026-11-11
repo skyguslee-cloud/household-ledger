@@ -107,3 +107,21 @@ revoke insert on public.ledger_spaces from anon, authenticated;
 
 -- 관리자가 신청을 승인해 가계부를 만들 때 (SQL Editor, 24자 이상 무작위 키):
 --   insert into public.ledger_spaces (space_id) values (translate(encode(gen_random_bytes(18), 'base64'), '+/', '-_')) returning space_id;
+
+-- ===== RLS 강화 =====
+-- 신청/관리자 테이블: 공개 역할 명시적 거부
+create policy "no public access" on public.ledger_requests for all to anon, authenticated using (false) with check (false);
+create policy "no public access" on public.ledger_admin    for all to anon, authenticated using (false) with check (false);
+-- 가계부 자체 삭제 금지 (연쇄 삭제로 전체 데이터가 지워지는 것 방지)
+drop policy "own space delete" on public.ledger_spaces;
+revoke delete on public.ledger_spaces from anon, authenticated;
+-- 이벤트 트리거 함수는 API로 호출 불가
+revoke execute on function public.rls_auto_enable() from anon, authenticated, public;
+-- 20자 미만이거나 없는 키는 null → 어떤 행도 일치하지 않음
+create or replace function public.ledger_key() returns text
+language sql stable
+set search_path = ''
+as $$
+  select case when char_length(k) >= 20 then k else null end
+  from (select coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-ledger-key', '') as k) s
+$$;
