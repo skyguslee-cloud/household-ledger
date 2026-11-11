@@ -53,6 +53,17 @@ small, .sub { color: var(--muted); font-size: .78rem; }
 .icon { width: 32px; height: 32px; border: none; border-radius: 50%; background: transparent; font-size: 1.3rem; line-height: 1; padding: 0; }
 .icon:hover { background: var(--soft); }
 
+/* 대문 응원 문구 */
+.cheer {
+  display: block; width: 100%; margin: 0 0 18px; padding: 18px 12px;
+  background: var(--strong); color: var(--inv); border: none; border-radius: var(--radius);
+  font-size: clamp(1.3rem, 5vw, 2rem); font-weight: 900; letter-spacing: -0.03em;
+  animation: cheer-pop .6s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.cheer:hover { opacity: .9; }
+@keyframes cheer-pop { from { transform: scale(.85); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cheer { animation: none; } }
+
 /* 탭 */
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
 .tabs button { border: none; background: none; padding: 10px 0 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; border-radius: 0; }
