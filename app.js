@@ -98,10 +98,6 @@ let sb = null, ledgerKey = null, lastLoad = 0;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 
-function newKey() {
-  const b = new Uint8Array(18); crypto.getRandomValues(b);
-  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_'); // 24자
-}
 function makeClient(key) {
   return supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
     global: { headers: { 'x-ledger-key': key } },
@@ -1042,7 +1038,6 @@ function renderSettings() {
 }
 $('keyToggle').onclick = () => { keyShown = !keyShown; renderSettings(); };
 $('copyInvite').onclick = () => copyText(inviteLink(), '초대 링크를 복사했습니다');
-$('newKeyCopy').onclick = () => copyText(inviteLink(), '초대 링크를 복사했습니다');
 $('userNames').addEventListener('change', async e => {
   const i = e.target.dataset.u; if (i == null) return;
   state.users[+i] = e.target.value.trim() || `user${+i + 1}`;
@@ -1102,11 +1097,10 @@ function showGate(msg = '') {
 function showApp() {
   $('gate').hidden = true; $('app').hidden = false; $('monthNav').hidden = false;
 }
-async function connect(key, { create = false } = {}) {
+async function connect(key) {
   ledgerKey = key; sb = makeClient(key);
   setSync('불러오는 중…', 'busy');
   try {
-    if (create) await q(sb.from('ledger_spaces').insert({ space_id: key }));
     await loadAll();
   } catch (e) {
     console.error(e);
@@ -1121,20 +1115,31 @@ async function connect(key, { create = false } = {}) {
   renderAll();
   return true;
 }
-$('gateCreate').onclick = async () => {
-  $('gateCreate').disabled = true;
-  const key = newKey();
-  if (await connect(key, { create: true })) {
-    const old = localOldData();
-    if (old && confirm(`이 브라우저에 예전 가계부 내역 ${old.items.length}건이 있습니다. 새 가계부(DB)로 옮길까요?`)) {
-      try { await run('예전 데이터 가져오기', () => importData(old)); } catch {}
-      refreshUserSelects(); renderAll();
-    }
-    $('newKeyView').value = key;
-    $('keyDlg').showModal();
-  }
-  $('gateCreate').disabled = false;
+// 새 가계부 만들기는 비활성화 — 관리자 승인 요청만 받음
+$('gateCreate').onclick = () => {
+  $('gateCreate').hidden = true; $('reqForm').hidden = false; $('reqEmail').focus();
 };
+$('reqForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('reqEmail').value.trim(), note = $('reqNote').value.trim();
+  $('reqSubmit').disabled = true; $('reqMsg').textContent = '보내는 중…';
+  try {
+    const res = await fetch(`${CFG.supabaseUrl}/functions/v1/request-ledger`, {
+      method: 'POST',
+      headers: { apikey: CFG.supabaseKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, note })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+    $('reqForm').hidden = true; $('reqDone').hidden = false;
+    $('reqDoneText').textContent = data.duplicate
+      ? `${email} 로 이미 신청이 접수되어 있습니다. 관리자 확인을 기다려 주세요.`
+      : `관리자가 확인한 뒤 ${email} 로 가계부 키를 보내드립니다.`;
+  } catch (err) {
+    $('reqMsg').textContent = err.message || '요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    $('reqSubmit').disabled = false;
+  }
+});
 $('gateJoin').onclick = () => {
   const k = $('gateKey').value.trim().replace(/^.*#k=/, '');
   if (k.length < 20) return ($('gateMsg').textContent = '키가 너무 짧습니다. 받은 키나 초대 링크 전체를 붙여넣으세요.');

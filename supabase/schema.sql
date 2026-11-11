@@ -77,3 +77,33 @@ create policy "own space" on public.ledger_recurring for all to anon, authentica
 
 grant select, insert, update, delete on public.ledger_spaces, public.ledger_entries, public.ledger_budgets, public.ledger_recurring to anon, authenticated;
 grant execute on function public.ledger_key() to anon, authenticated;
+
+-- ===== 새 가계부 신청 / 생성 비활성화 =====
+-- 신청 접수: Edge Function(request-ledger)이 service role로만 읽고 씀
+create table public.ledger_requests (
+  id         bigint generated always as identity primary key,
+  email      text not null check (char_length(email) <= 254),
+  note       text not null default '' check (char_length(note) <= 300),
+  status     text not null default 'pending' check (status in ('pending','approved','rejected')),
+  notified   boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index ledger_requests_created on public.ledger_requests (created_at);
+create index ledger_requests_email on public.ledger_requests (email, created_at);
+alter table public.ledger_requests enable row level security;
+
+-- 관리자 설정. 알림 받을 메일은 SQL Editor에서 직접 넣으세요(저장소에는 두지 않음):
+--   insert into public.ledger_admin values ('admin_email', '관리자메일주소');
+create table public.ledger_admin (key text primary key, value text not null);
+alter table public.ledger_admin enable row level security;
+revoke all on public.ledger_requests, public.ledger_admin from anon, authenticated;
+
+-- 새 가계부 만들기 비활성화: ledger_spaces 에는 insert 정책/권한을 주지 않음 (위의 "own space" 정책을 대체)
+drop policy "own space" on public.ledger_spaces;
+create policy "own space read"   on public.ledger_spaces for select to anon, authenticated using (space_id = (select public.ledger_key()));
+create policy "own space update" on public.ledger_spaces for update to anon, authenticated using (space_id = (select public.ledger_key())) with check (space_id = (select public.ledger_key()));
+create policy "own space delete" on public.ledger_spaces for delete to anon, authenticated using (space_id = (select public.ledger_key()));
+revoke insert on public.ledger_spaces from anon, authenticated;
+
+-- 관리자가 신청을 승인해 가계부를 만들 때 (SQL Editor, 24자 이상 무작위 키):
+--   insert into public.ledger_spaces (space_id) values (translate(encode(gen_random_bytes(18), 'base64'), '+/', '-_')) returning space_id;

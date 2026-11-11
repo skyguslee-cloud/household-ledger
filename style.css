@@ -214,6 +214,10 @@ tr.dup td { border-bottom: 1px dashed var(--strong); opacity: .7; }
 .gate { max-width: 440px; margin: 40px auto; padding: 28px; }
 .gate h2 { font-size: 1.3rem; margin-bottom: 8px; }
 .gate p { margin: 0 0 20px; font-size: .9rem; }
+.req { display: grid; gap: 8px; }
+.req-note { margin: 0 0 4px !important; font-size: .88rem; padding: 12px 14px; background: var(--soft); border-radius: 12px; }
+.req-done { padding: 16px; border: 1.5px solid var(--strong); border-radius: 12px; }
+.req-done p { margin: 6px 0 0 !important; }
 .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8rem; margin: 18px 0; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
