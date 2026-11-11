@@ -111,7 +111,7 @@ function friendlyError(e) {
 }
 
 /* ---------- 상태 ---------- */
-const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], rules: {}, recurring: [] });
+const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], rules: {}, recurring: [], budgetCarried: null });
 let state = emptyState();
 
 /* =========================================================
@@ -165,6 +165,7 @@ async function loadAll() {
   const s = emptyState();
   if (Array.isArray(spaces[0].users) && spaces[0].users.length === 5) s.users = spaces[0].users;
   s.rules = spaces[0].rules || {};
+  s.budgetCarried = spaces[0].budget_carried || null;
   s.items = entries.map(fromRow);
   budgets.forEach(b => { const t = b.kind === 'month' ? s.budgets : s.annualBudgets; (t[b.period] ||= {})[b.category] = Number(b.amount); });
   s.recurring = recs.map(recFromRow);
@@ -220,6 +221,56 @@ async function replaceBudgets(kind, period, obj) {
   if (rows.length) await q(sb.from('ledger_budgets').insert(rows));
   const t = kind === 'month' ? state.budgets : state.annualBudgets;
   if (rows.length) t[period] = Object.fromEntries(rows.map(r => [r.category, r.amount])); else delete t[period];
+}
+
+/* ---------- 예산 자동 이어쓰기 ----------
+   새 달(새 해)에 예산이 없으면 직전 예산을 그대로 복사.
+   어디까지 이어썼는지(budget_carried)를 저장해서, 사용자가 일부러 비운 달은 다시 채우지 않음. */
+async function carryBudgets() {
+  const now = thisMonth(), year = now.slice(0, 4);
+  const hasAny = obj => obj && Object.keys(obj).length > 0;
+  const lastMonth = Object.keys(state.budgets).filter(k => hasAny(state.budgets[k])).sort().pop();
+  const carried = state.budgetCarried;
+  const filled = [];
+
+  // 월간: 마지막으로 이어쓴 달(또는 마지막 예산 달) 다음 달부터 이번 달까지
+  const start = [carried, lastMonth].filter(Boolean).sort().pop();
+  if (start) {
+    for (let m = shiftMonth(start, 1); m <= now; m = shiftMonth(m, 1)) {
+      if (hasAny(state.budgets[m])) continue;
+      const src = prevPeriod(state.budgets, m);
+      if (!src) continue;
+      const rows = Object.entries(state.budgets[src]).filter(([c, v]) => v > 0 && MONTHLY_CATS.includes(c))
+        .map(([category, amount]) => ({ space_id: ledgerKey, kind: 'month', period: m, category, amount }));
+      if (!rows.length) continue;
+      // 가족이 동시에 열어도 겹치지 않게: 이미 있으면 그대로 둠
+      await q(sb.from('ledger_budgets').upsert(rows, { onConflict: 'space_id,kind,period,category', ignoreDuplicates: true }));
+      state.budgets[m] = Object.fromEntries(rows.map(r => [r.category, r.amount]));
+      filled.push(monthLabel(m));
+    }
+  }
+  // 연간: 올해 예산이 없고, 아직 올해로 이어쓰기를 하지 않았다면 작년 예산 복사
+  if (!hasAny(state.annualBudgets[year]) && (carried || '').slice(0, 4) < year) {
+    const src = prevPeriod(state.annualBudgets, year);
+    if (src) {
+      const rows = Object.entries(state.annualBudgets[src]).filter(([, v]) => v > 0)
+        .map(([category, amount]) => ({ space_id: ledgerKey, kind: 'year', period: year, category, amount }));
+      await q(sb.from('ledger_budgets').upsert(rows, { onConflict: 'space_id,kind,period,category', ignoreDuplicates: true }));
+      state.annualBudgets[year] = Object.fromEntries(rows.map(r => [r.category, r.amount]));
+      filled.push(`${year}년 연간`);
+    }
+  }
+  if (carried !== now) {
+    await q(sb.from('ledger_spaces').update({ budget_carried: now }).eq('space_id', ledgerKey));
+    state.budgetCarried = now;
+  }
+  return filled;
+}
+async function runCarry() {
+  try {
+    const filled = await carryBudgets();
+    if (filled.length) toast(`${filled.join(', ')} 예산을 지난 예산으로 채웠어요`);
+  } catch (e) { console.error('carry budgets', e); }
 }
 
 /* ---------- 고정 수입·지출 ---------- */
@@ -1204,6 +1255,7 @@ async function connect(key) {
   showApp(); refreshUserSelects(); resetRecForm();
   if (me() == null) openMeDialog(true);   // 처음 접속: 누구인지 고르기
   try { await generateRecurring(); } catch (e) { console.error(e); }
+  await runCarry();
   setSync('동기화됨');
   renderAll();
   return true;
@@ -1251,10 +1303,16 @@ async function refresh({ auto = false } = {}) {
   refreshing = true;
   try {
     setSync('불러오는 중…', 'busy');
-    await loadAll(); await generateRecurring();
+    await loadAll(); await generateRecurring(); await runCarry();
     setSync('동기화됨'); refreshUserSelects(); renderAll();
     if (!auto) toast('최신 내용으로 새로고침했어요');
-  } catch (e) { console.error(e); setSync('연결 안 됨 · 눌러서 다시 시도', 'err'); if (!auto) toast(friendlyError(e)); }
+  } catch (e) {
+    console.error(e);
+    if (e.code === 'NOT_FOUND') {   // 가계부가 없어졌으면 연결 화면으로
+      lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
+      showGate('이 가계부를 찾을 수 없습니다. 초대 링크를 다시 받아 주세요.');
+    } else { setSync('연결 안 됨 · 눌러서 다시 시도', 'err'); if (!auto) toast(friendlyError(e)); }
+  }
   finally { refreshing = false; }
 }
 $('sync').onclick = () => refresh();

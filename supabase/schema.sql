@@ -125,3 +125,9 @@ as $$
   select case when char_length(k) >= 20 then k else null end
   from (select coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-ledger-key', '') as k) s
 $$;
+
+-- ===== 예산 자동 이어쓰기 =====
+-- 앱이 열릴 때 예산이 없는 새 달은 직전 예산으로 채우고, 어디까지 채웠는지 기록
+-- (사용자가 일부러 비운 달을 다시 채우지 않기 위해)
+alter table public.ledger_spaces
+  add column budget_carried text check (budget_carried ~ '^\d{4}-\d{2}$');
