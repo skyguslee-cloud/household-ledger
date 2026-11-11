@@ -109,7 +109,7 @@ button { cursor: pointer; }
 .field-row { display: flex; gap: 8px; }
 .field-row input { flex: 1; }
 .hint { color: var(--muted); font-size: .8rem; margin: 12px 0 0; }
-.hint.top { margin: -6px 0 10px; }
+.hint.top { display: block; margin: -6px 0 10px; }
 .hint:empty { display: none; }
 
 /* 표 */
@@ -365,4 +365,21 @@ dialog.sheet.tall { max-width: 640px; width: min(640px, 100vw); }
   .metric-sub { display: none; }
   .stat-people { grid-template-columns: 1fr 1fr; }
   .stat-fam .diff, .stat-fam .prog { display: none; }
+}
+
+/* ---------- 월말 결산 ---------- */
+.notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1.5px solid var(--strong); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+.notice small { display: block; margin-top: 2px; }
+.settle th small { display: block; font-weight: 400; }
+.settle td small { display: block; }
+.settle td .chip { margin-left: 4px; }
+.settle input { width: 120px; }
+.settle .stl-more td { text-align: center; border-bottom: none; }
+.settle .mob { display: none; }
+#tab-settle .summary .value.over-text { color: inherit; text-decoration: underline; text-decoration-thickness: 2px; }
+@media (max-width: 680px) {
+  .settle .avg { display: none; }
+  .settle .mob { display: block; }
+  .settle input { width: 104px; }
+  .settle td .chip { display: block; width: fit-content; margin: 3px 0 0; }
 }

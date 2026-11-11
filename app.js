@@ -437,7 +437,7 @@ $('month').addEventListener('change', () => { if ($('month').value) renderAll();
 
 function renderAll() {
   refreshMethods();
-  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
+  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, settle: renderSettle, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
 }
 
 /* ---------- 홈: 분류별 블록 ---------- */
@@ -445,6 +445,7 @@ const home = { open: null, edit: null, all: new Set(), others: {} };   // open/e
 const PEEK = 3, MAX_BLOCKS = 6;
 
 function renderHome() {
+  renderSettleNotice();
   const m = $('month').value, pm = shiftMonth(m, -1), y = m.slice(0, 4);
   const cur = state.items.filter(i => i.date.startsWith(m));
   const prev = state.items.filter(i => i.date.startsWith(pm));
@@ -942,6 +943,147 @@ $('smsAdd').onclick = async () => {
     toast(`${items.length}건을 추가했습니다`);
     switchTab('ledger');
   } catch {} finally { $('smsAdd').disabled = false; }
+};
+
+/* ---------- 월말 결산 ----------
+   25일부터 홈에 알림. 이번 달 결과를 보고 최근 3개월 지출로 다음 달 예산을 추천·저장.
+   다음 달 예산이 이미 있으면 결산한 것으로 봄 (DB 구조 변경 없음). */
+const SETTLE_DAY = 25, SETTLE_DISMISS = 'ledger-settle-dismiss';
+const roundUp = (n, u = 10000) => Math.ceil(n / u) * u;
+const hasBudget = mm => Object.keys(state.budgets[mm] || {}).some(c => MONTHLY_CATS.includes(c));
+let settleDraft = { month: null, values: {} }, settleAll = false;
+
+// 이번 달 남은 고정 지출 (아직 날짜가 안 돼 자동 입력되지 않은 것)
+function pendingRecurring(m) {
+  const out = {};
+  if (m !== thisMonth()) return out;
+  for (const r of state.recurring) {
+    if (r.type !== 'expense' || r.skips.includes(m) || (r.end_month && m > r.end_month)) continue;
+    const a = recAmount(r, m);
+    if (a == null || recStart(r) > m || recDate(r, m) <= todayISO()) continue;
+    if (state.items.some(i => i.recurring_id === r.id && i.rec_month === m)) continue;
+    out[r.category] = (out[r.category] || 0) + a;
+  }
+  return out;
+}
+function settleData(m) {
+  const months = [shiftMonth(m, -2), shiftMonth(m, -1), m];
+  const first = state.items.reduce((a, i) => !a || i.date < a ? i.date : a, '').slice(0, 7);
+  const used = months.filter(mm => first && mm >= first);   // 가계부 시작 전 달은 평균에서 뺌
+  const spent = {};   // spent[달][분류]
+  months.forEach(mm => spent[mm] = {});
+  state.items.filter(i => i.type === 'expense' && months.includes(i.date.slice(0, 7)))
+    .forEach(i => { const t = spent[i.date.slice(0, 7)]; t[i.category] = (t[i.category] || 0) + i.amount; });
+  const pend = pendingRecurring(m);
+  const budget = state.budgets[m] || {};
+  return MONTHLY_CATS.map(c => {
+    const cur = spent[m][c] || 0, b = budget[c] || 0;
+    const vals = used.map(mm => (spent[mm][c] || 0) + (mm === m ? pend[c] || 0 : 0));
+    const avg = vals.length ? Math.max(0, sum(vals) / vals.length) : 0;
+    let rec, why;
+    if (!b) { rec = avg > 0 ? roundUp(avg) : 0; why = rec ? '새로' : ''; }
+    else if (avg > b * 1.05) { rec = roundUp(avg); why = '늘림'; }
+    else if (avg < b * 0.8) { rec = roundUp(avg); why = rec ? '줄임' : '없앰'; }
+    else { rec = b; why = '유지'; }
+    return { c, cur, b, avg, pend: pend[c] || 0, rec, why };
+  });
+}
+function renderSettleNotice() {
+  const el = $('settleNotice'), now = thisMonth(), next = shiftMonth(now, 1);
+  const day = +todayISO().slice(8);
+  const show = day >= SETTLE_DAY && $('month').value === now && !hasBudget(next) && lsGet(SETTLE_DISMISS) !== todayISO();
+  el.hidden = !show;
+  if (show) el.innerHTML = `<div><b>${+now.slice(5)}월 결산할 때예요</b><small>이번 달 쓴 돈을 확인하고 ${+next.slice(5)}월 예산을 정해 주세요.</small></div>
+    <span class="filters"><button type="button" class="btn sm ghost" data-act="settle-later">나중에</button><button type="button" class="btn sm primary" data-act="settle-go">결산하기</button></span>`;
+}
+$('settleNotice').addEventListener('click', e => {
+  const act = e.target.closest('button')?.dataset.act;
+  if (act === 'settle-later') { lsSet(SETTLE_DISMISS, todayISO()); renderSettleNotice(); }
+  else if (act === 'settle-go') switchTab('settle');
+});
+function renderSettle() {
+  const m = $('month').value, next = shiftMonth(m, 1), mo = +m.slice(5), no = +next.slice(5);
+  const rows = settleData(m), saved = state.budgets[next] || {}, done = hasBudget(next);
+  if (settleDraft.month !== m) {
+    settleDraft = { month: m, values: Object.fromEntries(rows.map(x => [x.c, done ? (saved[x.c] || 0) : x.rec])) };
+  }
+  const v = settleDraft.values;
+
+  // 결산 요약
+  const items = state.items.filter(i => i.date.startsWith(m));
+  const inc = sum(items.filter(i => i.type === 'income').map(i => i.amount));
+  const exp = sum(items.filter(i => i.type === 'expense').map(i => i.amount));
+  const bTot = sum(rows.map(x => x.b)), mUsed = sum(rows.map(x => x.cur));
+  const isNow = m === thisMonth(), pend = sum(rows.map(x => x.pend));
+  $('stlTitle').textContent = `${mo}월 결산`;
+  $('stlState').textContent = done ? `${no}월 예산 저장됨` : '아직 결산 전';
+  $('stlState').className = done ? 'chip solid' : 'chip';
+  const box = (label, n, cls = '') => `<div><div class="label">${label}</div><div class="value ${cls}">${(n < 0 ? '-' : '') + fmt(n)}</div></div>`;
+  $('stlSummary').innerHTML = box(`${mo}월 수입`, inc) + box(`${mo}월 지출`, exp) + box('수입 − 지출', inc - exp) +
+    box(bTot ? (mUsed > bTot ? '월 예산 초과' : '월 예산 남음') : '월 예산', bTot ? Math.abs(bTot - mUsed) : 0, bTot && mUsed > bTot ? 'over-text' : '');
+  const over = rows.filter(x => x.b && x.cur > x.b).map(x => x.c);
+  $('stlHint').innerHTML = [
+    isNow ? `오늘(${+todayISO().slice(8)}일)까지 기록된 내역 기준입니다.` : '',
+    pend ? `이번 달에 아직 남은 고정 지출 <b>${won(pend)}</b>이 있어요.` : '',
+    bTot ? `월 예산 ${won(bTot)} 중 ${won(mUsed)} 사용 (${(mUsed / bTot * 100).toFixed(0)}%).` : `${mo}월에는 월 예산이 없었어요.`,
+    over.length ? `예산을 넘은 분류: <b>${over.map(esc).join(', ')}</b>` : ''
+  ].filter(Boolean).join(' ');
+
+  // 다음 달 예산 표
+  $('stlNextTitle').textContent = `${no}월 예산 정하기`;
+  $('stlSave').textContent = `${no}월 예산으로 저장`;
+  const shown = rows.filter(x => x.b || x.cur || x.avg || v[x.c] || x.rec);
+  const hidden = rows.filter(x => !shown.includes(x));
+  const row = (x, rest) => {
+    const val = v[x.c] || 0, diff = val - x.b;
+    return `<tr${rest && !settleAll ? ' hidden' : ''}><td>${esc(x.c)}${x.why && x.why !== '유지' ? ` <span class="chip">${x.why === '늘림' ? '▲ ' : x.why === '줄임' || x.why === '없앰' ? '▼ ' : ''}추천 ${x.why}</span>` : ''}</td>
+      <td class="num"><span class="${x.b && x.cur > x.b ? 'over-text' : ''}">${fmt(x.cur)}</span><small>${x.b ? '/ ' + fmt(x.b) : '예산 없음'}</small><small class="mob">평균 ${fmt(Math.round(x.avg))}</small></td>
+      <td class="num avg">${x.avg ? fmt(Math.round(x.avg)) : '<small>0</small>'}${x.pend ? `<small>남은 고정 ${fmt(x.pend)} 포함</small>` : ''}</td>
+      <td class="num"><input type="number" min="0" step="10000" data-stl="${esc(x.c)}" value="${val || ''}" placeholder="—">
+        <small>${val !== x.rec ? `추천 ${x.rec ? fmt(x.rec) : '없음'}` : x.b ? (diff ? `이번 달보다 ${diff > 0 ? '+' : '-'}${fmt(diff)}` : '이번 달과 같음') : '추천'}</small></td></tr>`;
+  };
+  $('stlBody').innerHTML = shown.map(x => row(x)).join('') + hidden.map(x => row(x, true)).join('') +
+    (hidden.length ? `<tr class="stl-more"><td colspan="4"><button type="button" class="btn sm ghost" data-act="stl-all">${settleAll ? '쓴 적 없는 분류 접기 ▴' : `쓴 적 없는 분류 ${hidden.length}개 더 보기 ▾`}</button></td></tr>` : '');
+  renderSettleFoot();
+}
+function renderSettleFoot() {
+  const rows = settleData(settleDraft.month), v = settleDraft.values;
+  const nTot = sum(MONTHLY_CATS.map(c => v[c] || 0)), bTot = sum(rows.map(x => x.b));
+  const d = nTot - bTot;
+  $('stlFoot').innerHTML = `<tr><td><b>합계</b></td><td class="num"><b>${fmt(sum(rows.map(x => x.cur)))}</b><small>${bTot ? '/ ' + fmt(bTot) : ''}</small></td>
+    <td class="num avg"><b>${fmt(Math.round(sum(rows.map(x => x.avg))))}</b></td>
+    <td class="num"><b>${won(nTot)}</b><small>${bTot ? (d ? `이번 달보다 ${d > 0 ? '+' : '-'}${fmt(d)}` : '이번 달과 같음') : ''}</small></td></tr>`;
+}
+$('tab-settle').addEventListener('click', e => {
+  if (e.target.closest('[data-act="stl-all"]')) { settleAll = !settleAll; renderSettle(); }
+});
+$('tab-settle').addEventListener('input', e => {
+  const c = e.target.dataset.stl; if (!c) return;
+  settleDraft.values[c] = Math.max(0, Math.round(+e.target.value || 0));
+  renderSettleFoot();
+});
+$('stlFillRec').onclick = () => {
+  settleDraft.values = Object.fromEntries(settleData($('month').value).map(x => [x.c, x.rec]));
+  renderSettle(); toast('추천 금액으로 채웠어요. 저장해야 적용됩니다');
+};
+$('stlFillCur').onclick = () => {
+  const b = state.budgets[$('month').value] || {};
+  settleDraft.values = Object.fromEntries(MONTHLY_CATS.map(c => [c, b[c] || 0]));
+  renderSettle(); toast('이번 달 예산으로 채웠어요. 저장해야 적용됩니다');
+};
+$('stlSave').onclick = async () => {
+  const m = $('month').value, next = shiftMonth(m, 1);
+  const obj = Object.fromEntries(MONTHLY_CATS.map(c => [c, settleDraft.values[c] || 0]).filter(([, a]) => a > 0));
+  if (!Object.keys(obj).length && !confirm(`${monthLabel(next)} 예산을 모두 비울까요?`)) return;
+  if (hasBudget(next) && !confirm(`${monthLabel(next)} 예산이 이미 있어요. 이 금액으로 바꿀까요?`)) return;
+  $('stlSave').disabled = true;
+  try {
+    // 연간 분류 등 다른 예산 행은 그대로 두고 월간 분류만 교체
+    const keep = Object.fromEntries(Object.entries(state.budgets[next] || {}).filter(([c]) => !MONTHLY_CATS.includes(c)));
+    await run('다음 달 예산 저장', () => replaceBudgets('month', next, { ...keep, ...obj }));
+    toast(`${monthLabel(next)} 예산 ${won(sum(Object.values(obj)))}을 저장했어요`);
+  } catch {} finally { $('stlSave').disabled = false; }
+  renderSettle();
 };
 
 /* ---------- 개인별 통계 ---------- */
