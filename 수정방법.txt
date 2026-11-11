@@ -1,0 +1,5 @@
+가계부 수정하면,  아래 한번 다시 해야함
+
+git add -A
+git commit -m "수정 내용"
+git push

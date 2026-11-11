@@ -4,873 +4,266 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>우리집 가계부</title>
-<style>
-  :root {
-    --bg: #f5f6f8; --card: #fff; --text: #222; --muted: #808590; --line: #e6e8eb;
-    --income: #1f6feb; --expense: #e5484d; --transfer: #8a8f98; --accent: #fee500; --accent-text: #191919;
-    --ok: #30a46c; --warn: #f5a524;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: var(--bg); color: var(--text); }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 16px 16px 60px; }
-  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-  h1 { font-size: 1.35rem; margin: 0; flex: 1; }
-  h2 { font-size: 1rem; margin: 0 0 12px; }
-  .monthnav { display: flex; align-items: center; gap: 4px; }
-  .monthnav button { padding: 6px 10px; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
-  .tabs button { border: none; background: transparent; padding: 10px 14px; border-radius: 999px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-  .tabs button.on { background: var(--accent); color: var(--accent-text); }
-  .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .summary > div { text-align: center; }
-  .label { font-size: .8rem; color: var(--muted); }
-  .value { font-size: 1.15rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .income { color: var(--income); } .expense { color: var(--expense); } .transfer { color: var(--transfer); }
-  .budgetline { margin-top: 14px; font-size: .9rem; }
-  .budgetline .bar { margin-top: 6px; }
-  input, select, button, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-width: 0; color: inherit; }
-  textarea { width: 100%; resize: vertical; }
-  button { cursor: pointer; }
-  .primary { background: var(--accent); color: var(--accent-text); border: none; font-weight: 700; }
-  .danger { color: var(--expense); }
-  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .spacer { flex: 1; }
-  .hint { color: var(--muted); font-size: .85rem; margin: 8px 0 0; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: .92rem; vertical-align: middle; }
-  th { color: var(--muted); font-weight: 500; font-size: .8rem; white-space: nowrap; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  small, .sub { color: var(--muted); font-size: .78rem; }
-  .act { white-space: nowrap; text-align: right; }
-  .act button { border: none; background: none; color: var(--muted); padding: 2px 6px; }
-  .act button:hover { color: var(--text); }
-  .empty { text-align: center; color: var(--muted); padding: 20px 0; }
-  .badge { display: inline-block; font-size: .75rem; padding: 2px 8px; border-radius: 999px; background: #eef0f3; white-space: nowrap; }
-  .u0 { background: #fff3c4; } .u1 { background: #dbeafe; } .u2 { background: #dcfce7; } .u3 { background: #fce7f3; } .u4 { background: #ede9fe; }
-  .rows { display: flex; flex-direction: column; gap: 8px; }
-  .row { display: grid; grid-template-columns: 110px 1fr 120px; gap: 8px; align-items: center; font-size: .88rem; }
-  .bar { height: 10px; background: #eef0f3; border-radius: 5px; overflow: hidden; }
-  .bar span { display: block; height: 100%; background: var(--expense); border-radius: 5px; }
-  .bar.ok span { background: var(--ok); } .bar.warn span { background: var(--warn); } .bar.over span { background: var(--expense); }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .two .card { margin-bottom: 0; }
-  .banner { background: #fff4d6; border: 1px solid #f5d27a; padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; font-size: .88rem; }
-  .sms-table input, .sms-table select { padding: 5px 6px; font-size: .85rem; width: 100%; }
-  .sms-table td { padding: 4px 3px; }
-  .sms-table .raw { max-width: 180px; font-size: .72rem; color: var(--muted); white-space: pre-wrap; }
-  tr.dup { background: #fff7f7; }
-  .budget input { width: 120px; text-align: right; }
-  .budget td:first-child { white-space: nowrap; }
-  @media (max-width: 640px) { .budget input { width: 95px; } .budget th, .budget td { padding: 6px 3px; font-size: .82rem; } }
-  .over-text { color: var(--expense); font-weight: 600; }
-  [hidden] { display: none !important; }
-  @media (max-width: 640px) {
-    .summary { grid-template-columns: repeat(2, 1fr); row-gap: 14px; }
-    .two { grid-template-columns: 1fr; }
-    .row { grid-template-columns: 80px 1fr 90px; }
-    .value { font-size: 1rem; }
-  }
-</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>💛 우리집 가계부</h1>
-    <div class="monthnav">
-      <button id="prevM" aria-label="이전 달">◀</button>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">₩</span>
+      <div>
+        <h1>우리집 가계부</h1>
+        <div class="sync" id="sync"><i></i><span>연결 전</span></div>
+      </div>
+    </div>
+    <div class="monthnav" id="monthNav">
+      <button class="icon" id="prevM" aria-label="이전 달">‹</button>
       <input type="month" id="month">
-      <button id="nextM" aria-label="다음 달">▶</button>
+      <button class="icon" id="nextM" aria-label="다음 달">›</button>
     </div>
   </header>
 
-  <div class="banner" id="storageWarn" hidden>⚠️ 이 화면에서는 브라우저 저장소를 쓸 수 없어 새로고침하면 데이터가 사라집니다. 파일을 Chrome/Edge 등에서 직접 열어 사용하세요.</div>
-
-  <nav class="tabs">
-    <button data-tab="ledger" class="on">수입/지출</button>
-    <button data-tab="sms">문자·알림 등록</button>
-    <button data-tab="budget">예산</button>
-    <button data-tab="settings">설정</button>
-  </nav>
-
-  <!-- ===== 수입/지출 ===== -->
-  <section id="tab-ledger">
-    <div class="card">
-      <div class="summary">
-        <div><div class="label">수입</div><div class="value income" id="sumIncome">0원</div></div>
-        <div><div class="label">지출</div><div class="value expense" id="sumExpense">0원</div></div>
-        <div><div class="label">수입 − 지출</div><div class="value" id="sumBalance">0원</div></div>
-        <div><div class="label">이체 (합계 제외)</div><div class="value transfer" id="sumTransfer">0원</div></div>
+  <!-- ===== 연결 화면 ===== -->
+  <section id="gate" hidden>
+    <div class="card gate">
+      <h2>가계부 연결</h2>
+      <p class="muted">회원가입 없이 <b>가계부 키</b>로 가족이 같은 가계부를 함께 씁니다. 키를 아는 사람만 내용을 볼 수 있으니 가족에게만 알려주세요.</p>
+      <button class="btn primary block" id="gateCreate">새 가계부 만들기</button>
+      <div class="or"><span>또는</span></div>
+      <div class="field-row">
+        <input id="gateKey" placeholder="가족에게 받은 가계부 키 붙여넣기" autocomplete="off" spellcheck="false">
+        <button class="btn" id="gateJoin">연결</button>
       </div>
-      <div class="budgetline" id="budgetLine" hidden></div>
+      <p class="hint" id="gateMsg"></p>
     </div>
+  </section>
 
-    <div class="card">
-      <h2 id="formTitle">내역 추가</h2>
-      <form id="form" class="grid-form">
-        <input type="date" id="fmDate" required>
-        <input type="time" id="fmTime">
-        <select id="fmType"></select>
-        <select id="fmCat"></select>
-        <select id="fmUser"></select>
-        <input type="text" id="fmMethod" placeholder="결제수단 (예: 신한카드)" list="methodList">
-        <input type="text" id="fmMemo" placeholder="내용 / 사용처">
-        <input type="number" id="fmAmount" placeholder="금액" step="1" required>
-        <button type="submit" class="primary" id="fmSubmit">추가</button>
-        <button type="button" id="fmCancel" hidden>취소</button>
-      </form>
-      <datalist id="methodList"></datalist>
-    </div>
+  <div id="app" hidden>
+    <nav class="tabs">
+      <button data-tab="ledger" class="on">내역</button>
+      <button data-tab="sms">문자 등록</button>
+      <button data-tab="budget">예산</button>
+      <button data-tab="fixed">고정 수입·지출</button>
+      <button data-tab="settings">설정</button>
+    </nav>
 
-    <div class="two">
+    <!-- ===== 내역 ===== -->
+    <section id="tab-ledger">
       <div class="card">
-        <h2>분류별 지출</h2>
-        <div class="rows" id="catRows"></div>
+        <div class="summary">
+          <div><div class="label">수입</div><div class="value" id="sumIncome">0</div></div>
+          <div><div class="label">지출</div><div class="value" id="sumExpense">0</div></div>
+          <div><div class="label">수입 − 지출</div><div class="value" id="sumBalance">0</div></div>
+          <div><div class="label">이체 · 합계 제외</div><div class="value dim" id="sumTransfer">0</div></div>
+        </div>
+        <div class="budgetline" id="budgetLine" hidden></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 id="formTitle">내역 추가</h2></div>
+        <form id="form" class="grid-form">
+          <input type="date" id="fmDate" required>
+          <input type="time" id="fmTime">
+          <select id="fmType"></select>
+          <select id="fmCat"></select>
+          <select id="fmUser"></select>
+          <input type="text" id="fmMethod" placeholder="결제수단" list="methodList" maxlength="40">
+          <input type="text" id="fmMemo" placeholder="내용 / 사용처" maxlength="200">
+          <input type="number" id="fmAmount" placeholder="금액" step="1" required>
+          <button type="submit" class="btn primary" id="fmSubmit">추가</button>
+          <button type="button" class="btn" id="fmCancel" hidden>취소</button>
+        </form>
+        <datalist id="methodList"></datalist>
+      </div>
+
+      <div class="two">
+        <div class="card"><div class="card-head"><h2>분류별 지출</h2></div><div class="rows" id="catRows"></div></div>
+        <div class="card"><div class="card-head"><h2>사용자별 지출</h2></div><div class="rows" id="userRows"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>내역</h2>
+          <div class="filters">
+            <select id="fUser"></select>
+            <select id="fType">
+              <option value="">전체</option>
+              <option value="expense">지출</option>
+              <option value="income">수입</option>
+              <option value="transfer">이체</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="list">
+            <tbody id="list"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 문자 등록 ===== -->
+    <section id="tab-sms" hidden>
+      <div class="card">
+        <div class="card-head"><h2>카드 승인 · 입출금 문자 붙여넣기</h2></div>
+        <textarea id="smsText" rows="9" placeholder="카카오톡 알림톡이나 문자 메시지를 그대로 복사해서 붙여넣으세요.&#10;여러 건은 빈 줄로 구분하면 한 번에 인식합니다.&#10;&#10;예)&#10;[Web발신]&#10;신한카드(1234)승인 홍*동 12,500원(일시불)11/11 12:34 스타벅스강남점 누적1,234,567원"></textarea>
+        <div class="toolbar">
+          <label class="inline">누가 쓴 건가요? <select id="smsUser"></select></label>
+          <span class="spacer"></span>
+          <button type="button" class="btn" id="smsSample">예시 넣기</button>
+          <button type="button" class="btn primary" id="smsParse">인식하기</button>
+        </div>
+        <p class="hint">카드 승인 → 지출 · 승인취소 → 지출 차감(환불) · 입금 → 수입 · 출금/송금 → 이체. 사용처로 분류를 추측하고, 직접 고친 분류는 다음부터 기억합니다.</p>
+      </div>
+      <div class="card" id="smsResultCard" hidden>
+        <div class="card-head">
+          <h2 id="smsResultTitle">인식 결과</h2>
+          <button type="button" class="btn primary" id="smsAdd">선택 항목 추가</button>
+        </div>
+        <div class="table-wrap">
+          <table class="sms-table">
+            <thead><tr><th></th><th>날짜</th><th>구분</th><th>분류</th><th>사용자</th><th>결제수단</th><th>내용</th><th>금액</th><th>원문</th></tr></thead>
+            <tbody id="smsRows"></tbody>
+          </table>
+        </div>
+        <p class="hint">점선 표시 줄은 같은 날짜·금액·내용이 이미 있어 중복으로 보이는 항목입니다(기본 선택 해제).</p>
+      </div>
+    </section>
+
+    <!-- ===== 예산 ===== -->
+    <section id="tab-budget" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 id="budgetTitle">월간 예산</h2>
+          <div class="filters">
+            <button type="button" class="btn sm" id="copyPrev">지난 예산 불러오기</button>
+            <button type="button" class="btn sm ghost" id="clearBudget">비우기</button>
+          </div>
+        </div>
+        <p class="hint top" id="budgetHint"></p>
+        <div class="table-wrap">
+          <table class="budget">
+            <thead><tr><th>분류</th><th class="num">예산</th><th class="num">사용</th><th class="num">남음</th><th class="prog">진행</th></tr></thead>
+            <tbody id="budgetBody"></tbody>
+            <tfoot id="budgetFoot"></tfoot>
+          </table>
+        </div>
+        <p class="hint">예산은 달마다 따로 저장됩니다. 비워두면 그 분류는 예산 없음. 사용 금액은 모든 사용자의 지출 합계입니다.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 id="annualTitle">연간 예산</h2>
+          <div class="filters">
+            <button type="button" class="btn sm" id="copyPrevYear">작년 예산 불러오기</button>
+            <button type="button" class="btn sm ghost" id="clearAnnual">비우기</button>
+          </div>
+        </div>
+        <p class="hint top" id="annualHint"></p>
+        <div class="table-wrap">
+          <table class="budget">
+            <thead><tr><th>분류</th><th class="num">연간 예산</th><th class="num">올해 사용</th><th class="num">이번 달</th><th class="num">남음</th><th class="prog">진행</th></tr></thead>
+            <tbody id="annualBody"></tbody>
+            <tfoot id="annualFoot"></tfoot>
+          </table>
+        </div>
+        <p class="hint">여행/숙박 · 경조/선물 · 미용 · 의류쇼핑은 1년 단위로 관리하며 월간 예산에는 넣지 않습니다.</p>
+      </div>
+    </section>
+
+    <!-- ===== 고정 수입·지출 ===== -->
+    <section id="tab-fixed" hidden>
+      <div class="card">
+        <div class="card-head"><h2>고정 수입 · 지출</h2></div>
+        <div id="recList"></div>
+        <p class="hint">정해진 날이 되면 그 달 내역에 자동으로 기록됩니다. 자동 기록된 내역을 지우면 그 달에는 다시 생기지 않습니다.</p>
       </div>
       <div class="card">
-        <h2>사용자별 지출</h2>
-        <div class="rows" id="userRows"></div>
+        <div class="card-head"><h2 id="recFormTitle">새 고정 항목</h2></div>
+        <form id="recForm" class="grid-form">
+          <input id="rcTitle" placeholder="이름 (예: 월급)" required maxlength="60">
+          <select id="rcType"></select>
+          <select id="rcCat"></select>
+          <select id="rcUser"></select>
+          <label class="inline">매월 <input type="number" id="rcDay" min="1" max="31" value="1" style="width:64px"> 일</label>
+          <input id="rcMethod" placeholder="결제수단/계좌 (선택)" list="methodList" maxlength="40">
+          <input type="number" id="rcAmount" placeholder="금액" min="1" step="1" class="rc-new">
+          <select id="rcStart" class="rc-new"></select>
+          <button type="submit" class="btn primary" id="rcSubmit">등록</button>
+          <button type="button" class="btn" id="rcCancel" hidden>취소</button>
+        </form>
       </div>
-    </div>
-    <div style="height:14px"></div>
+    </section>
 
-    <div class="card">
-      <div class="toolbar" style="margin-bottom:8px">
-        <h2 style="margin:0">내역</h2>
-        <span class="spacer"></span>
-        <select id="fUser"></select>
-        <select id="fType">
-          <option value="">전체</option>
-          <option value="expense">지출</option>
-          <option value="income">수입</option>
-          <option value="transfer">이체</option>
-        </select>
+    <!-- ===== 설정 ===== -->
+    <section id="tab-settings" hidden>
+      <div class="card">
+        <div class="card-head"><h2>가계부 공유</h2></div>
+        <div class="field-row">
+          <input id="keyView" readonly>
+          <button class="btn" id="keyToggle">보기</button>
+          <button class="btn" id="copyInvite">초대 링크 복사</button>
+        </div>
+        <p class="hint">초대 링크를 가족에게 보내면 열자마자 같은 가계부에 연결됩니다. 키가 있으면 누구나 볼 수 있으니 가족에게만 공유하세요.</p>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>날짜</th><th>사용자</th><th>분류 / 내용</th><th class="num">금액</th><th></th></tr></thead>
-          <tbody id="list"></tbody>
-        </table>
+      <div class="card">
+        <div class="card-head"><h2>사용자 이름</h2></div>
+        <div class="grid-form" id="userNames"></div>
       </div>
-    </div>
-  </section>
-
-  <!-- ===== 문자·알림 등록 ===== -->
-  <section id="tab-sms" hidden>
-    <div class="card">
-      <h2>카드 승인 · 입출금 문자 붙여넣기</h2>
-      <textarea id="smsText" rows="9" placeholder="카카오톡 알림톡이나 문자 메시지를 그대로 복사해서 붙여넣으세요.&#10;여러 건은 빈 줄로 구분하면 한 번에 인식합니다.&#10;&#10;예)&#10;[Web발신]&#10;신한카드(1234)승인 홍*동 12,500원(일시불)11/11 12:34 스타벅스강남점 누적1,234,567원"></textarea>
-      <div class="toolbar" style="margin-top:8px">
-        <label>누가 쓴 건가요? <select id="smsUser"></select></label>
-        <span class="spacer"></span>
-        <button type="button" id="smsSample">예시 넣기</button>
-        <button type="button" class="primary" id="smsParse">인식하기</button>
+      <div class="card">
+        <div class="card-head"><h2>백업 · 내보내기</h2></div>
+        <div class="toolbar">
+          <button type="button" class="btn" id="exportJson">전체 백업 (JSON)</button>
+          <label class="btn">백업 불러오기<input type="file" id="importJson" accept=".json,application/json" hidden></label>
+          <button type="button" class="btn" id="importLocal" hidden>이 브라우저의 예전 데이터 가져오기</button>
+          <button type="button" class="btn" id="exportCsv">CSV 내보내기</button>
+        </div>
+        <p class="hint">백업 불러오기는 현재 가계부 내용을 백업 파일 내용으로 <b>바꿉니다</b>.</p>
       </div>
-      <p class="hint">카드 승인 → 지출, 승인취소 → 지출 차감(환불), 입금 → 수입, 출금·송금 → 이체로 인식합니다. 사용처를 보고 분류를 추측하고, 직접 고친 분류는 다음부터 기억합니다.</p>
-    </div>
-    <div class="card" id="smsResultCard" hidden>
-      <div class="toolbar" style="margin-bottom:8px">
-        <h2 style="margin:0" id="smsResultTitle">인식 결과</h2>
-        <span class="spacer"></span>
-        <button type="button" class="primary" id="smsAdd">선택 항목 추가</button>
+      <div class="card">
+        <div class="card-head"><h2>위험 구역</h2></div>
+        <div class="toolbar">
+          <button type="button" class="btn" id="disconnect">이 기기에서 연결 해제</button>
+          <button type="button" class="btn danger" id="clearAll">전체 데이터 삭제</button>
+        </div>
       </div>
-      <div class="table-wrap">
-        <table class="sms-table">
-          <thead><tr><th></th><th>날짜</th><th>구분</th><th>분류</th><th>사용자</th><th>결제수단</th><th>내용</th><th>금액</th><th>원문</th></tr></thead>
-          <tbody id="smsRows"></tbody>
-        </table>
-      </div>
-      <p class="hint">빨간 줄은 이미 같은 날짜·금액·내용이 있어 중복으로 보이는 항목입니다(기본 선택 해제).</p>
-    </div>
-  </section>
-
-  <!-- ===== 예산 ===== -->
-  <section id="tab-budget" hidden>
-    <div class="card">
-      <div class="toolbar" style="margin-bottom:6px">
-        <h2 style="margin:0" id="budgetTitle">예산</h2>
-        <span class="spacer"></span>
-        <button type="button" id="copyPrev">지난 예산 불러오기</button>
-        <button type="button" id="clearBudget" class="danger">이번 달 예산 비우기</button>
-      </div>
-      <p class="hint" id="budgetHint"></p>
-      <div class="table-wrap">
-        <table class="budget">
-          <thead><tr><th>분류</th><th class="num">이번 달 예산</th><th class="num">사용</th><th class="num">남음</th><th style="min-width:110px">진행</th></tr></thead>
-          <tbody id="budgetBody"></tbody>
-          <tfoot id="budgetFoot"></tfoot>
-        </table>
-      </div>
-      <p class="hint">예산은 달마다 따로 저장됩니다. 금액을 바꾸면 선택한 달에만 적용되고, 비워두면 그 분류는 예산 없음으로 처리됩니다. 사용 금액은 모든 사용자의 지출 합계입니다.</p>
-    </div>
-
-    <div class="card">
-      <div class="toolbar" style="margin-bottom:6px">
-        <h2 style="margin:0" id="annualTitle">연간 예산</h2>
-        <span class="spacer"></span>
-        <button type="button" id="copyPrevYear">작년 예산 불러오기</button>
-        <button type="button" id="clearAnnual" class="danger">올해 예산 비우기</button>
-      </div>
-      <p class="hint" id="annualHint"></p>
-      <div class="table-wrap">
-        <table class="budget">
-          <thead><tr><th>분류</th><th class="num">연간 예산</th><th class="num">올해 사용</th><th class="num">이번 달</th><th class="num">남음</th><th style="min-width:110px">진행</th></tr></thead>
-          <tbody id="annualBody"></tbody>
-          <tfoot id="annualFoot"></tfoot>
-        </table>
-      </div>
-      <p class="hint">여행/숙박, 경조/선물, 미용, 의류쇼핑은 특정 달에 몰리는 지출이라 1년 단위로 관리하고, 월간 예산에는 넣지 않습니다. 연간 예산도 해마다 따로 저장됩니다.</p>
-    </div>
-  </section>
-
-  <!-- ===== 설정 ===== -->
-  <section id="tab-settings" hidden>
-    <div class="card">
-      <h2>사용자 이름</h2>
-      <div class="grid-form" id="userNames"></div>
-      <p class="hint">이름을 바꿔도 기존 내역은 그대로 연결됩니다.</p>
-    </div>
-    <div class="card">
-      <h2>백업 · 내보내기</h2>
-      <div class="toolbar">
-        <button type="button" id="exportJson">전체 백업 (JSON)</button>
-        <label class="badge" style="padding:8px 12px;cursor:pointer">백업 불러오기 <input type="file" id="importJson" accept=".json,application/json" hidden></label>
-        <button type="button" id="exportCsv">내역 CSV 내보내기</button>
-        <span class="spacer"></span>
-        <button type="button" id="clearAll" class="danger">전체 데이터 삭제</button>
-      </div>
-      <p class="hint">데이터는 이 브라우저에만 저장됩니다. 다른 PC나 휴대폰으로 옮기려면 JSON으로 백업한 뒤 거기서 불러오세요.</p>
-    </div>
-  </section>
+    </section>
+  </div>
 </div>
 
-<script>
-/* ---------- 기본 설정 ---------- */
-const STORE = 'ledger-v2', OLD_STORE = 'simple-ledger-v1';
-const TYPES = { expense: '지출', income: '수입', transfer: '이체' };
-const CATS = {
-  expense: ['식비', '카페/간식', '편의점/마트/잡화', '쇼핑', '의류쇼핑', '생활', '주거/통신', '교통/자동차',
-            '의료/건강', '미용', '문화/여가', '여행/숙박', '교육', '자녀/육아', '반려동물', '경조/선물',
-            '보험/세금/금융', '기부/후원', '미분류'],
-  income: ['급여', '상여금', '용돈', '금융수입', '사업/부수입', '환급/캐시백', '기타수입'],
-  transfer: ['내계좌이체', '저축/투자', '카드대금', '대출상환', '기타이체']
-};
-const DEFAULT_CAT = { expense: '미분류', income: '기타수입', transfer: '기타이체' };
-// 1년 단위로 예산을 잡는 분류 (월 예산에서는 빠짐)
-const ANNUAL_CATS = ['여행/숙박', '경조/선물', '미용', '의류쇼핑'];
-const MONTHLY_CATS = CATS.expense.filter(c => !ANNUAL_CATS.includes(c));
-// 없어진 분류 → 합쳐질 분류
-const RENAMED = { '술/유흥': '문화/여가' };
-// 사용처 키워드 → 분류 (위에서부터 먼저 맞는 것 사용, '^'는 앞부분 일치)
-const KEYWORDS = {
-  expense: [
-    ['교통/자동차', ['택시', '카카오T', '카카오모빌리티', '티머니', '코레일', 'KTX', 'SRT', '버스', '지하철', '주유', '주차', 'SK에너지', 'GS칼텍스', 'S-OIL', '에쓰오일', '오일뱅크', '하이패스', '도로공사', '쏘카', '세차']],
-    ['카페/간식', ['스타벅스', 'STARBUCKS', '커피', '카페', '이디야', '투썸', '메가엠지씨', '메가커피', '컴포즈', '빽다방', '할리스', '폴바셋', '파리바게뜨', '뚜레쥬르', '베이커리', '배스킨', '던킨', '설빙', '공차', '디저트']],
-    ['편의점/마트/잡화', ['GS25', '지에스25', '^CU', '씨유', '세븐일레븐', '이마트24', '이마트', '홈플러스', '롯데마트', '코스트코', '다이소', '노브랜드', '트레이더스', '하나로마트', '마트']],
-    ['식비', ['배달의민족', '배민', '요기요', '쿠팡이츠', '식당', '김밥', '맥도날드', '버거킹', '롯데리아', '맘스터치', 'KFC', '치킨', '피자', '한솥', '분식', '국밥', '반점', '초밥', '스시', '고기', '갈비', '삼겹', '푸드']],
-    ['의류쇼핑', ['무신사', '29CM', '에이블리', '지그재그', '유니클로', '자라', 'ZARA', 'H&M', '스파오', '탑텐', '나이키', '아디다스', '뉴발란스', '의류', '패션', '아울렛']],
-    ['쇼핑', ['쿠팡', '11번가', 'G마켓', '지마켓', '옥션', 'SSG', '신세계', '백화점', '컬리', '알리익스프레스', '테무', '네이버페이']],
-    ['미용', ['올리브영', '미용실', '헤어', '네일', '뷰티']],
-    ['의료/건강', ['병원', '의원', '약국', '치과', '한의원', '안과', '피부과', '내과', '정형외과']],
-    ['문화/여가', ['CGV', '메가박스', '롯데시네마', '넷플릭스', 'NETFLIX', '유튜브', 'YOUTUBE', '멜론', '스포티파이', '티빙', '웨이브', '디즈니', '교보문고', '예스24', '알라딘', '피트니스', '헬스', 'PC방', '볼링',
-                   '호프', '포차', '주점', '이자카야', '노래', '와인', '맥주']],
-    ['여행/숙박', ['호텔', '모텔', '펜션', '야놀자', '여기어때', '에어비앤비', '아고다', '대한항공', '아시아나', '제주항공', '진에어', '티웨이', '에어부산']],
-    ['주거/통신', ['SK텔레콤', 'SKT', '^KT', 'LG유플러스', 'LGU+', '관리비', '한국전력', '전기요금', '도시가스', '수도요금', '월세']],
-    ['교육', ['학원', '클래스101', '인프런', '교육', '학습지']],
-    ['보험/세금/금융', ['보험', '생명', '화재', '국세', '지방세', '세금', '수수료']],
-    ['반려동물', ['동물병원', '펫', '애견']],
-    ['생활', ['세탁', '크린토피아', '이케아', 'IKEA', '철물']]
-  ],
-  income: [
-    ['상여금', ['상여', '성과급', '보너스']],
-    ['급여', ['급여', '월급', 'SALARY']],
-    ['금융수입', ['이자', '배당']],
-    ['환급/캐시백', ['캐시백', '환급', '포인트']],
-    ['용돈', ['용돈']]
-  ],
-  transfer: [
-    ['카드대금', ['카드대금', '결제대금', '카드결제']],
-    ['저축/투자', ['적금', '저축', '증권', '투자', '청약']],
-    ['대출상환', ['대출', '상환']],
-    ['내계좌이체', ['내계좌', '본인']]
-  ]
-};
-const ISSUERS = ['KB국민카드', 'KB국민은행', 'KB국민', '국민카드', 'KB', '신한카드', '신한은행', '신한', '삼성카드', '삼성',
-  '현대카드', '현대', '롯데카드', '롯데', '우리카드', '우리은행', '하나카드', '하나은행', 'NH농협카드', 'NH농협', '농협', 'NH',
-  'BC카드', '비씨카드', '씨티', '카카오뱅크', '카카오페이', '토스뱅크', '토스', '케이뱅크', 'IBK기업은행', '기업은행', 'IBK',
-  'SC제일', '새마을금고', '우체국', '수협', '신협', '부산은행', 'iM뱅크', '대구은행', '경남은행', '광주은행', '전북은행', '제주은행'];
+<!-- 고정 금액 변경 -->
+<dialog id="amtDlg">
+  <form method="dialog" id="amtForm">
+    <h2 id="amtTitle">금액 변경</h2>
+    <input type="number" id="amtValue" min="1" step="1" required>
+    <label class="radio"><input type="radio" name="amtWhen" value="this" checked> <span id="amtThis">이번 달부터</span></label>
+    <label class="radio"><input type="radio" name="amtWhen" value="next"> <span id="amtNext">다음 달부터</span></label>
+    <p class="hint" id="amtHint"></p>
+    <div class="toolbar end">
+      <button class="btn" value="cancel" formnovalidate>취소</button>
+      <button class="btn primary" value="ok">변경</button>
+    </div>
+  </form>
+</dialog>
 
-/* ---------- 저장 ---------- */
-const $ = id => document.getElementById(id);
-const won = n => (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('ko-KR') + '원';
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const pad = n => String(n).padStart(2, '0');
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const sum = arr => arr.reduce((a, b) => a + b, 0);
+<!-- 새 가계부 키 안내 -->
+<dialog id="keyDlg">
+  <form method="dialog">
+    <h2>가계부가 만들어졌습니다</h2>
+    <p class="muted">아래 키(또는 초대 링크)가 있으면 다른 기기·가족도 같은 가계부를 쓸 수 있습니다. 잃어버리면 찾을 수 없으니 안전한 곳에 보관하세요.</p>
+    <input id="newKeyView" readonly>
+    <div class="toolbar end">
+      <button class="btn" type="button" id="newKeyCopy">초대 링크 복사</button>
+      <button class="btn primary" value="ok">확인</button>
+    </div>
+  </form>
+</dialog>
 
-let storageOK = true;
-let state = load();
+<div class="toast" id="toast" hidden></div>
 
-function load() {
-  let s = null;
-  try { s = JSON.parse(localStorage.getItem(STORE)); } catch (e) { storageOK = false; }
-  if (!s) {
-    s = { items: [], budgets: {}, users: ['user1', 'user2', 'user3', 'user4', 'user5'], rules: {} };
-    try { // 이전 버전 데이터 옮기기
-      const old = JSON.parse(localStorage.getItem(OLD_STORE));
-      if (Array.isArray(old)) s.items = old.map(migrateOld);
-    } catch (e) {}
-  }
-  return normalize(s);
-}
-function normalize(s) {
-  s.items ||= []; s.budgets ||= {}; s.rules ||= {}; s.annualBudgets ||= {};
-  s.users ||= ['user1', 'user2', 'user3', 'user4', 'user5'];
-  // 없어진 분류(술/유흥 등)를 합쳐진 분류로 옮기기
-  s.items.forEach(i => { if (RENAMED[i.category]) i.category = RENAMED[i.category]; });
-  for (const k in s.rules) if (RENAMED[s.rules[k]]) s.rules[k] = RENAMED[s.rules[k]];
-  for (const b of [...Object.values(s.budgets), ...Object.values(s.annualBudgets)])
-    for (const [from, to] of Object.entries(RENAMED))
-      if (b[from]) { b[to] = (b[to] || 0) + b[from]; delete b[from]; }
-  return s;
-}
-function migrateOld(i) {
-  const map = { '주거': '주거/통신', '통신': '주거/통신', '의료': '의료/건강', '문화': '문화/여가', '교통': '교통/자동차', '월급': '급여', '부수입': '사업/부수입' };
-  let c = map[i.category] || i.category;
-  if (!CATS[i.type]?.includes(c)) c = DEFAULT_CAT[i.type] || '미분류';
-  return { id: i.id, date: i.date, time: '', type: i.type, category: c, user: 0, method: '', memo: i.memo || '', amount: i.amount };
-}
-function save() {
-  try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { storageOK = false; }
-  $('storageWarn').hidden = storageOK;
-}
-
-/* ---------- 공통 옵션 ---------- */
-const typeOptions = sel => Object.entries(TYPES).map(([k, v]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${v}</option>`).join('');
-const catOptions = (type, sel) => CATS[type].map(c => `<option${c === sel ? ' selected' : ''}>${c}</option>`).join('');
-const userOptions = (sel, all) => (all ? '<option value="">전체 사용자</option>' : '') +
-  state.users.map((n, i) => `<option value="${i}"${String(sel) === String(i) ? ' selected' : ''}>${esc(n)}</option>`).join('');
-const userBadge = u => `<span class="badge u${u}">${esc(state.users[u] ?? 'user' + (u + 1))}</span>`;
-
-function refreshUserSelects() {
-  $('fUser').innerHTML = userOptions($('fUser').value, true);
-  $('fmUser').innerHTML = userOptions($('fmUser').value || 0);
-  $('smsUser').innerHTML = userOptions($('smsUser').value || 0);
-}
-function refreshMethods() {
-  const set = new Set(state.items.map(i => i.method).filter(Boolean));
-  $('methodList').innerHTML = [...set, '현금', '계좌이체'].map(m => `<option value="${esc(m)}">`).join('');
-}
-
-/* ---------- 탭 ---------- */
-let currentTab = 'ledger';
-document.querySelector('.tabs').addEventListener('click', e => {
-  const t = e.target.dataset.tab; if (!t) return;
-  currentTab = t;
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
-  document.querySelectorAll('section[id^="tab-"]').forEach(s => s.hidden = s.id !== 'tab-' + t);
-  renderAll();
-});
-
-/* ---------- 월 이동 ---------- */
-function shiftMonth(m, d) { const [y, mo] = m.split('-').map(Number); const dt = new Date(y, mo - 1 + d, 1); return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}`; }
-$('prevM').onclick = () => { $('month').value = shiftMonth($('month').value, -1); renderAll(); };
-$('nextM').onclick = () => { $('month').value = shiftMonth($('month').value, 1); renderAll(); };
-$('month').addEventListener('change', renderAll);
-
-/* ---------- 수입/지출 화면 ---------- */
-function renderLedger() {
-  const m = $('month').value, u = $('fUser').value, t = $('fType').value;
-  const base = state.items.filter(i => i.date.startsWith(m) && (u === '' || String(i.user) === u));
-  let inc = 0, exp = 0, trf = 0; const byCat = {}, byUser = {};
-  base.forEach(i => {
-    if (i.type === 'income') inc += i.amount;
-    else if (i.type === 'transfer') trf += i.amount;
-    else { exp += i.amount; byCat[i.category] = (byCat[i.category] || 0) + i.amount; byUser[i.user] = (byUser[i.user] || 0) + i.amount; }
-  });
-  $('sumIncome').textContent = won(inc);
-  $('sumExpense').textContent = won(exp);
-  $('sumTransfer').textContent = won(trf);
-  const bal = inc - exp;
-  $('sumBalance').textContent = won(bal);
-  $('sumBalance').className = 'value ' + (bal < 0 ? 'expense' : bal > 0 ? 'income' : '');
-
-  // 예산 요약
-  const budget = state.budgets[m] || {};
-  const y = m.slice(0, 4), annual = state.annualBudgets[y] || {};
-  const yearSpent = {};
-  state.items.filter(i => i.type === 'expense' && i.date.startsWith(y) && ANNUAL_CATS.includes(i.category))
-    .forEach(i => yearSpent[i.category] = (yearSpent[i.category] || 0) + i.amount);
-  const budgetRow = (label, total, used) => {
-    const pct = used / total * 100;
-    return `<div style="margin-top:8px">${label} <b>${won(total)}</b> 중 <b>${won(used)}</b> 사용 (${pct.toFixed(0)}%) · ` +
-      (total - used >= 0 ? `남음 <b>${won(total - used)}</b>` : `<span class="over-text">${won(used - total)} 초과</span>`) +
-      `<div class="bar ${barClass(pct)}"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div></div>`;
-  };
-  const mTotal = sum(MONTHLY_CATS.map(c => budget[c] || 0));
-  const mUsed = sum(MONTHLY_CATS.map(c => byCat[c] || 0));
-  const aTotal = sum(ANNUAL_CATS.map(c => annual[c] || 0));
-  const aUsed = sum(ANNUAL_CATS.map(c => yearSpent[c] || 0));
-  let bl = '';
-  if (u === '' && mTotal > 0) bl += budgetRow('월간 예산', mTotal, mUsed);
-  if (u === '' && aTotal > 0) bl += budgetRow(`${y}년 연간 예산`, aTotal, aUsed);
-  $('budgetLine').hidden = !bl;
-  $('budgetLine').innerHTML = bl;
-
-  // 분류별
-  const cats = Object.entries(byCat).filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
-  const maxC = Math.max(1, ...cats.map(c => c[1]));
-  $('catRows').innerHTML = cats.length ? cats.map(([c, v]) => {
-    const isA = ANNUAL_CATS.includes(c), b = isA ? annual[c] : budget[c], used = isA ? yearSpent[c] : v;
-    return `<div class="row"><span>${esc(c)}</span>
-      <div class="bar"><span style="width:${Math.max(0, v / maxC * 100).toFixed(1)}%"></span></div>
-      <span class="num">${won(v)}${b && u === '' ? `<br><small class="${used > b ? 'over-text' : ''}">${isA ? `연 ${won(used)}/${won(b)}` : `예산 ${won(b)}`}</small>` : ''}</span></div>`;
-  }).join('') : '<div class="empty">지출 내역이 없습니다</div>';
-
-  // 사용자별
-  const users = Object.entries(byUser).filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
-  const maxU = Math.max(1, ...users.map(x => x[1]));
-  $('userRows').innerHTML = users.length ? users.map(([k, v]) => `<div class="row"><span>${userBadge(+k)}</span>
-      <div class="bar"><span style="width:${Math.max(0, v / maxU * 100).toFixed(1)}%"></span></div>
-      <span class="num">${won(v)}</span></div>`).join('') : '<div class="empty">지출 내역이 없습니다</div>';
-
-  // 목록
-  const rows = base.filter(i => t === '' || i.type === t)
-    .sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '') || b.id - a.id);
-  $('list').innerHTML = rows.length ? rows.map(i => {
-    const sign = i.type === 'income' ? '+' : i.type === 'transfer' ? '' : (i.amount < 0 ? '+' : '-');
-    return `<tr data-id="${i.id}">
-      <td>${i.date.slice(5).replace('-', '.')}${i.time ? `<br><small>${i.time}</small>` : ''}</td>
-      <td>${userBadge(i.user)}</td>
-      <td><b class="${i.type}" style="font-weight:600">${esc(i.category)}</b> ${esc(i.memo)}<br><small>${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${i.amount < 0 && i.type === 'expense' ? ' · 취소/환불' : ''}</small></td>
-      <td class="num ${i.type}">${sign}${Math.abs(i.amount).toLocaleString('ko-KR')}원</td>
-      <td class="act"><button data-act="edit" title="수정">✎</button><button data-act="del" title="삭제">✕</button></td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="5" class="empty">이 달의 내역이 없습니다</td></tr>';
-}
-const barClass = pct => pct > 100 ? 'over' : pct >= 80 ? 'warn' : 'ok';
-
-$('fUser').addEventListener('change', renderLedger);
-$('fType').addEventListener('change', renderLedger);
-
-/* 입력/수정 폼 */
-let editingId = null;
-$('fmType').innerHTML = typeOptions('expense');
-const fillFormCats = sel => $('fmCat').innerHTML = catOptions($('fmType').value, sel);
-$('fmType').addEventListener('change', () => fillFormCats());
-
-function resetForm() {
-  editingId = null;
-  $('formTitle').textContent = '내역 추가';
-  $('fmSubmit').textContent = '추가';
-  $('fmCancel').hidden = true;
-  $('fmMemo').value = ''; $('fmAmount').value = ''; $('fmTime').value = '';
-}
-$('fmCancel').onclick = resetForm;
-
-$('form').addEventListener('submit', e => {
-  e.preventDefault();
-  const amount = Math.round(Number($('fmAmount').value));
-  if (!amount) return;
-  const item = {
-    id: editingId ?? Date.now(),
-    date: $('fmDate').value, time: $('fmTime').value,
-    type: $('fmType').value, category: $('fmCat').value,
-    user: +$('fmUser').value, method: $('fmMethod').value.trim(),
-    memo: $('fmMemo').value.trim(), amount
-  };
-  if (editingId != null) state.items = state.items.map(i => i.id === editingId ? item : i);
-  else state.items.push(item);
-  if (item.memo) state.rules[item.memo] = item.category; // 분류 학습
-  save();
-  $('month').value = item.date.slice(0, 7);
-  resetForm();
-  $('fmAmount').focus();
-  renderAll();
-});
-
-$('list').addEventListener('click', e => {
-  const act = e.target.dataset.act; if (!act) return;
-  const id = +e.target.closest('tr').dataset.id;
-  const it = state.items.find(i => i.id === id); if (!it) return;
-  if (act === 'del') {
-    if (!confirm('이 내역을 삭제할까요?')) return;
-    state.items = state.items.filter(i => i.id !== id);
-    save(); renderAll();
-  } else {
-    editingId = id;
-    $('fmDate').value = it.date; $('fmTime').value = it.time || '';
-    $('fmType').value = it.type; fillFormCats(it.category);
-    $('fmUser').value = it.user; $('fmMethod').value = it.method || '';
-    $('fmMemo').value = it.memo; $('fmAmount').value = it.amount;
-    $('formTitle').textContent = '내역 수정';
-    $('fmSubmit').textContent = '수정';
-    $('fmCancel').hidden = false;
-    $('form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-});
-
-/* ---------- 문자·알림 인식 ---------- */
-function splitMessages(text) {
-  text = text.replace(/\r/g, '')
-    .replace(/\[(오전|오후)\s*\d{1,2}:\d{2}\]/g, ' ')        // 카톡 대화 내보내기 시간표시 제거
-    .replace(/^-{3,}.*-{3,}$/gm, '');                      // 카톡 날짜 구분선 제거
-  return text.split(/\n\s*\n|(?=\[Web발신\])|\n(?=\[[^\]\n]{1,20}\]\s)/).map(s => s.trim()).filter(Boolean);
-}
-
-const NOISE = /누적|잔액|승인|일시불|할부|입금|출금|통장|계좌|Web발신|님[,!]?$|님 |취소|결제|사용가능|한도|^\[.*\]$/;
-function isNoise(l) {
-  l = l.trim();
-  return !l || NOISE.test(l) || /\*/.test(l) || /[\d,]+\s*원/.test(l) ||
-    /\d{1,2}[\/.]\d{1,2}|\d{1,2}:\d{2}/.test(l) || /^[\d\-\s,()*|.]+$/.test(l) ||
-    ISSUERS.some(n => l === n || l.startsWith(n + '카드') || l === n + '카드');
-}
-
-function matchKeywords(list, text) {
-  const T = text.toUpperCase();
-  for (const [cat, words] of list)
-    if (words.some(w => w.startsWith('^') ? T.startsWith(w.slice(1).toUpperCase()) : T.includes(w.toUpperCase()))) return cat;
-  return null;
-}
-function guessCategory(type, merchant, flat) {
-  const learned = state.rules[merchant];
-  if (merchant && learned && CATS[type].includes(learned)) return learned;
-  return (merchant && matchKeywords(KEYWORDS[type], merchant)) ||
-         (type !== 'expense' && matchKeywords(KEYWORDS[type], flat)) || DEFAULT_CAT[type];
-}
-
-function parseMessage(raw) {
-  const t = raw.replace(/\[Web발신\]/g, '').trim();
-  const flat = t.replace(/\s+/g, ' ');
-  const lines = t.split('\n').map(s => s.trim()).filter(Boolean);
-
-  // 금액: 누적/잔액 앞의 금액은 제외
-  let amount = null, amtIdx = -1, m;
-  const re = /([\d,]{1,15})\s*원/g;
-  while ((m = re.exec(flat))) {
-    if (/누적|잔액|한도|가능/.test(flat.slice(Math.max(0, m.index - 6), m.index))) continue;
-    const v = +m[1].replace(/,/g, '');
-    if (v > 0) { amount = v; amtIdx = m.index; break; }
-  }
-  if (amount == null && (m = flat.match(/(입금|출금|이체|송금|승인)\s*([\d,]{2,})/))) {
-    amount = +m[2].replace(/,/g, ''); amtIdx = m.index;
-  }
-  if (amount == null) {
-    const prevIsBal = i => i > 0 && /잔액/.test(lines[i - 1]);
-    const i = lines.findIndex((l, i) => /^[\d,]+$/.test(l) && l.includes(',') && !prevIsBal(i));
-    if (i >= 0) { amount = +lines[i].replace(/,/g, ''); amtIdx = flat.indexOf(lines[i]); }
-  }
-  if (!amount) return null;
-
-  // 구분
-  let type = 'expense', cancel = false;
-  if (/취소/.test(flat)) cancel = true;
-  else if (/입금|받았|들어왔/.test(flat) && !/출금/.test(flat)) type = 'income';
-  else if (/출금|이체|송금|보냈/.test(flat) && !/승인|결제/.test(flat)) type = 'transfer';
-
-  // 날짜/시간
-  let date = todayISO(), time = '', d;
-  if ((d = flat.match(/(20\d{2})\s*[.\/\-년]\s*(\d{1,2})\s*[.\/\-월]\s*(\d{1,2})/))) date = `${d[1]}-${pad(d[2])}-${pad(d[3])}`;
-  else if ((d = flat.match(/(?<!\d)(\d{1,2})[\/.\-](\d{1,2})(?!\d)/)) || (d = flat.match(/(\d{1,2})월\s*(\d{1,2})일/))) {
-    const mo = +d[1], da = +d[2];
-    if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
-      const now = new Date(); let y = now.getFullYear();
-      if (new Date(y, mo - 1, da) - now > 2 * 864e5) y--;   // 미래 날짜면 작년 문자
-      date = `${y}-${pad(mo)}-${pad(da)}`;
-    }
-  }
-  if ((d = flat.match(/(?<!\d)(\d{1,2}):(\d{2})(?!\d)/))) time = `${pad(d[1])}:${d[2]}`;
-
-  // 결제수단 (금액 앞부분에서 카드사/은행 찾기)
-  const head = amtIdx > 0 ? flat.slice(0, amtIdx) : flat;
-  let method = '';
-  const iss = ISSUERS.map(n => [n, head.indexOf(n)]).filter(x => x[1] >= 0).sort((a, b) => a[1] - b[1] || b[0].length - a[0].length)[0];
-  if (iss) {
-    method = iss[0] === 'KB' ? 'KB국민' : iss[0] === 'NH' ? 'NH농협' : iss[0];
-    if (!/(카드|은행|뱅크|페이|금고|우체국|수협|신협|토스)$/.test(method)) method += /승인|결제|취소/.test(flat) ? '카드' : '은행';
-    const last4 = head.match(/\(?(\d{4})\)?\s*(승인|취소)/) || head.match(/\((\d{4})\)/);
-    if (last4) method += `(${last4[1]})`;
-  }
-
-  // 사용처 / 상대방
-  let merchant = '';
-  const tm = t.match(/(?<!\d)\d{1,2}:\d{2}[ \t]*\n?[ \t]*([^\n]+)/);
-  if (tm) merchant = tm[1].replace(/(누적|잔액|사용가능|한도).*$/, '').replace(/^[|\s:\-]+/, '').trim();
-  if (!merchant || isNoise(merchant)) {
-    merchant = '';
-    if (type !== 'expense' && (d = flat.match(/(입금|출금|송금|이체)\s*[\d,]+\s*원?\s*([가-힣A-Za-z]{2,12})/)) && !/잔액|누적/.test(d[2])) merchant = d[2];
-  }
-  if (!merchant) merchant = lines.find(l => !isNoise(l)) || '';
-  merchant = merchant.slice(0, 40);
-
-  const category = cancel ? guessCategory('expense', merchant, flat) : guessCategory(type, merchant, flat);
-  return { date, time, type, category, method, memo: merchant, amount: cancel ? -amount : amount, raw: t, cancel };
-}
-
-let parsed = [];
-$('smsParse').onclick = () => {
-  const user = +$('smsUser').value;
-  parsed = splitMessages($('smsText').value).map(parseMessage).filter(Boolean).map(p => ({
-    ...p, user,
-    dup: state.items.some(i => i.date === p.date && i.amount === p.amount && (i.memo || '') === p.memo)
-  }));
-  renderParsed();
-};
-$('smsSample').onclick = () => {
-  const d = new Date(), md = `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
-  $('smsText').value = `[Web발신]
-신한카드(1234)승인 홍*동 12,500원(일시불)${md} 12:34 스타벅스강남점 누적1,234,567원
-
-[Web발신]
-KB국민카드5678승인
-홍*동
-38,000원 일시불
-${md} 19:02
-배달의민족
-누적512,000원
-
-[Web발신]
-삼성카드 승인취소 홍*동 8,900원 ${md} 21:10 쿠팡
-
-[카카오뱅크] 입금 2,500,000원 ${md} 09:00 (주)회사급여 잔액 3,120,000원
-
-[Web발신]
-[KB]${md} 10:15
-123456**789
-카드대금
-출금
-452,300
-잔액2,667,700`;
-};
-
-function renderParsed() {
-  $('smsResultCard').hidden = false;
-  const n = parsed.length, dups = parsed.filter(p => p.dup).length;
-  $('smsResultTitle').textContent = n ? `인식 결과 ${n}건${dups ? ` (중복 의심 ${dups}건)` : ''}` : '인식된 내역이 없습니다';
-  $('smsRows').innerHTML = parsed.map((p, i) => `<tr data-i="${i}" class="${p.dup ? 'dup' : ''}">
-    <td><input type="checkbox" data-f="on" ${p.dup ? '' : 'checked'}></td>
-    <td><input type="date" data-f="date" value="${p.date}" style="min-width:130px"></td>
-    <td><select data-f="type">${typeOptions(p.type)}</select></td>
-    <td><select data-f="category" style="min-width:110px">${catOptions(p.type, p.category)}</select></td>
-    <td><select data-f="user">${userOptions(p.user)}</select></td>
-    <td><input data-f="method" value="${esc(p.method)}" list="methodList" style="min-width:100px"></td>
-    <td><input data-f="memo" value="${esc(p.memo)}" style="min-width:110px"></td>
-    <td><input type="number" data-f="amount" value="${p.amount}" style="min-width:90px;text-align:right"></td>
-    <td class="raw">${esc(p.raw)}</td>
-  </tr>`).join('');
-  $('smsAdd').hidden = !n;
-}
-$('smsRows').addEventListener('change', e => {
-  if (e.target.dataset.f !== 'type') return;
-  const tr = e.target.closest('tr');
-  const p = parsed[+tr.dataset.i];
-  tr.querySelector('[data-f=category]').innerHTML = catOptions(e.target.value, guessCategory(e.target.value, p.memo, p.raw));
-});
-$('smsAdd').onclick = () => {
-  let added = 0, base = Date.now();
-  $('smsRows').querySelectorAll('tr').forEach(tr => {
-    const f = k => tr.querySelector(`[data-f=${k}]`);
-    if (!f('on').checked) return;
-    const amount = Math.round(+f('amount').value);
-    if (!amount || !f('date').value) return;
-    const p = parsed[+tr.dataset.i];
-    const item = {
-      id: base + added, date: f('date').value, time: p.time, type: f('type').value, category: f('category').value,
-      user: +f('user').value, method: f('method').value.trim(), memo: f('memo').value.trim(), amount
-    };
-    state.items.push(item);
-    if (item.memo) state.rules[item.memo] = item.category;
-    added++;
-  });
-  if (!added) return alert('추가할 항목을 선택하세요.');
-  save();
-  const last = state.items[state.items.length - 1];
-  $('month').value = last.date.slice(0, 7);
-  parsed = []; $('smsText').value = ''; $('smsResultCard').hidden = true;
-  alert(`${added}건을 추가했습니다.`);
-  document.querySelector('.tabs [data-tab=ledger]').click();
-};
-
-/* ---------- 예산 ---------- */
-function prevBudgetMonth(m) {
-  return Object.keys(state.budgets).filter(k => k < m && Object.keys(state.budgets[k]).length).sort().pop();
-}
-function renderBudget() {
-  const m = $('month').value;
-  const [y, mo] = m.split('-');
-  $('budgetTitle').textContent = `${y}년 ${+mo}월 월간 예산`;
-  const budget = state.budgets[m] || {};
-  const spent = {};
-  state.items.filter(i => i.type === 'expense' && i.date.startsWith(m)).forEach(i => spent[i.category] = (spent[i.category] || 0) + i.amount);
-  const prev = prevBudgetMonth(m);
-  $('copyPrev').disabled = !prev;
-  $('copyPrev').textContent = prev ? `${prev.replace('-', '년 ')}월 예산 불러오기` : '지난 예산 없음';
-  $('budgetHint').textContent = Object.keys(budget).length ? '' :
-    (prev ? `이 달은 아직 예산이 없습니다. 위 버튼으로 ${prev} 예산을 복사한 뒤 고칠 수 있어요.` : '분류별로 금액을 입력하면 이 달의 예산이 됩니다.');
-
-  let tb = 0, ts = 0;
-  $('budgetBody').innerHTML = MONTHLY_CATS.map(c => {
-    const b = budget[c] || 0, s = spent[c] || 0;
-    tb += b; ts += s;
-    const pct = b ? s / b * 100 : 0;
-    return `<tr>
-      <td>${c}</td>
-      <td class="num"><input type="number" min="0" step="10000" data-cat="${c}" value="${b || ''}" placeholder="-"></td>
-      <td class="num">${s ? won(s) : '<small>0원</small>'}</td>
-      <td class="num">${b ? `<span class="${b - s < 0 ? 'over-text' : ''}">${won(b - s)}</span>` : '<small>-</small>'}</td>
-      <td>${b ? `<div class="bar ${barClass(pct)}"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div><small>${pct.toFixed(0)}%</small>` : ''}</td>
-    </tr>`;
-  }).join('');
-  const tp = tb ? ts / tb * 100 : 0;
-  $('budgetFoot').innerHTML = `<tr style="font-weight:700">
-    <td>합계</td><td class="num">${won(tb)}</td><td class="num">${won(ts)}</td>
-    <td class="num ${tb - ts < 0 ? 'over-text' : ''}">${tb ? won(tb - ts) : '-'}</td>
-    <td>${tb ? `<div class="bar ${barClass(tp)}"><span style="width:${Math.min(100, tp)}%"></span></div><small>${tp.toFixed(0)}%</small>` : ''}</td></tr>`;
-  renderAnnual();
-}
-
-/* 연간 예산 */
-function yearProgress(y) { // 선택한 해가 몇 % 지났는지
-  const now = new Date(), start = new Date(y, 0, 1), end = new Date(+y + 1, 0, 1);
-  return Math.min(100, Math.max(0, (now - start) / (end - start) * 100));
-}
-function prevBudgetYear(y) {
-  return Object.keys(state.annualBudgets).filter(k => k < y && Object.keys(state.annualBudgets[k]).length).sort().pop();
-}
-function renderAnnual() {
-  const m = $('month').value, y = m.slice(0, 4);
-  const budget = state.annualBudgets[y] || {};
-  const ys = {}, ms = {};
-  state.items.filter(i => i.type === 'expense' && i.date.startsWith(y) && ANNUAL_CATS.includes(i.category)).forEach(i => {
-    ys[i.category] = (ys[i.category] || 0) + i.amount;
-    if (i.date.startsWith(m)) ms[i.category] = (ms[i.category] || 0) + i.amount;
-  });
-  const yp = yearProgress(y);
-  $('annualTitle').textContent = `${y}년 연간 예산`;
-  const prev = prevBudgetYear(y);
-  $('copyPrevYear').disabled = !prev;
-  $('copyPrevYear').textContent = prev ? `${prev}년 예산 불러오기` : '지난 예산 없음';
-  $('annualHint').textContent = `${y}년이 ${yp.toFixed(0)}% 지났습니다. 진행 막대의 세로선이 지금까지의 적정 사용 위치입니다.` +
-    (Object.keys(budget).length ? '' : prev ? ` 아직 올해 예산이 없어요. ${prev}년 예산을 불러와서 고칠 수 있습니다.` : '');
-
-  let tb = 0, ts = 0, tm = 0;
-  const bar = (pct) => `<div class="bar ${barClass(pct)}" style="position:relative"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span>
-      <i style="position:absolute;top:-2px;bottom:-2px;left:${yp}%;width:2px;background:#222;opacity:.5"></i></div><small>${pct.toFixed(0)}%</small>`;
-  $('annualBody').innerHTML = ANNUAL_CATS.map(c => {
-    const b = budget[c] || 0, s = ys[c] || 0, mm = ms[c] || 0;
-    tb += b; ts += s; tm += mm;
-    return `<tr>
-      <td>${c}</td>
-      <td class="num"><input type="number" min="0" step="100000" data-acat="${c}" value="${b || ''}" placeholder="-"></td>
-      <td class="num">${s ? won(s) : '<small>0원</small>'}</td>
-      <td class="num">${mm ? won(mm) : '<small>0원</small>'}</td>
-      <td class="num">${b ? `<span class="${b - s < 0 ? 'over-text' : ''}">${won(b - s)}</span>` : '<small>-</small>'}</td>
-      <td>${b ? bar(s / b * 100) : ''}</td>
-    </tr>`;
-  }).join('');
-  $('annualFoot').innerHTML = `<tr style="font-weight:700">
-    <td>합계</td><td class="num">${won(tb)}</td><td class="num">${won(ts)}</td><td class="num">${won(tm)}</td>
-    <td class="num ${tb - ts < 0 ? 'over-text' : ''}">${tb ? won(tb - ts) : '-'}</td>
-    <td>${tb ? bar(ts / tb * 100) : ''}</td></tr>`;
-}
-$('annualBody').addEventListener('change', e => {
-  const c = e.target.dataset.acat; if (!c) return;
-  const y = $('month').value.slice(0, 4), v = Math.max(0, Math.round(+e.target.value || 0));
-  state.annualBudgets[y] ||= {};
-  if (v) state.annualBudgets[y][c] = v; else delete state.annualBudgets[y][c];
-  if (!Object.keys(state.annualBudgets[y]).length) delete state.annualBudgets[y];
-  save(); renderAnnual();
-});
-$('copyPrevYear').onclick = () => {
-  const y = $('month').value.slice(0, 4), prev = prevBudgetYear(y);
-  if (!prev) return;
-  if (state.annualBudgets[y] && !confirm('올해 연간 예산을 덮어쓸까요?')) return;
-  state.annualBudgets[y] = { ...state.annualBudgets[prev] };
-  save(); renderAnnual();
-};
-$('clearAnnual').onclick = () => {
-  const y = $('month').value.slice(0, 4);
-  if (!state.annualBudgets[y] || !confirm(`${y}년 연간 예산을 모두 지울까요?`)) return;
-  delete state.annualBudgets[y];
-  save(); renderAnnual();
-};
-$('budgetBody').addEventListener('change', e => {
-  const c = e.target.dataset.cat; if (!c) return;
-  const m = $('month').value, v = Math.max(0, Math.round(+e.target.value || 0));
-  state.budgets[m] ||= {};
-  if (v) state.budgets[m][c] = v; else delete state.budgets[m][c];
-  if (!Object.keys(state.budgets[m]).length) delete state.budgets[m];
-  save(); renderBudget();
-});
-$('copyPrev').onclick = () => {
-  const m = $('month').value, prev = prevBudgetMonth(m);
-  if (!prev) return;
-  if (state.budgets[m] && Object.keys(state.budgets[m]).length && !confirm('이번 달 예산을 덮어쓸까요?')) return;
-  state.budgets[m] = { ...state.budgets[prev] };
-  save(); renderBudget();
-};
-$('clearBudget').onclick = () => {
-  const m = $('month').value;
-  if (!state.budgets[m] || !confirm('이번 달 예산을 모두 지울까요?')) return;
-  delete state.budgets[m];
-  save(); renderBudget();
-};
-
-/* ---------- 설정 ---------- */
-function renderSettings() {
-  $('userNames').innerHTML = state.users.map((n, i) =>
-    `<label><span class="badge u${i}">user${i + 1}</span> <input data-u="${i}" value="${esc(n)}" maxlength="12" style="width:100%;margin-top:4px"></label>`).join('');
-}
-$('userNames').addEventListener('change', e => {
-  const i = e.target.dataset.u; if (i == null) return;
-  state.users[+i] = e.target.value.trim() || `user${+i + 1}`;
-  save(); refreshUserSelects(); renderSettings();
-});
-function download(name, content, type) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type }));
-  a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-$('exportJson').onclick = () => download(`가계부_백업_${todayISO()}.json`, JSON.stringify(state, null, 2), 'application/json');
-$('importJson').addEventListener('change', async e => {
-  const file = e.target.files[0]; if (!file) return;
-  try {
-    const s = JSON.parse(await file.text());
-    if (!Array.isArray(s.items)) throw new Error();
-    if (!confirm(`백업의 내역 ${s.items.length}건으로 현재 데이터를 바꿀까요?`)) return;
-    state = normalize({ ...s, users: s.users || state.users });
-    save(); refreshUserSelects(); renderAll();
-  } catch { alert('백업 파일을 읽을 수 없습니다.'); }
-  e.target.value = '';
-});
-$('exportCsv').onclick = () => {
-  const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const lines = state.items.slice().sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
-    .map(i => [i.date, i.time, TYPES[i.type], q(i.category), q(state.users[i.user]), q(i.method), q(i.memo), i.amount].join(','));
-  download('가계부.csv', '\uFEFF' + ['날짜,시간,구분,분류,사용자,결제수단,내용,금액', ...lines].join('\n'), 'text/csv;charset=utf-8');
-};
-$('clearAll').onclick = () => {
-  if (!confirm('모든 내역, 예산, 학습된 분류를 삭제할까요? 되돌릴 수 없습니다.')) return;
-  state.items = []; state.budgets = {}; state.annualBudgets = {}; state.rules = {};
-  save(); renderAll();
-};
-
-/* ---------- 시작 ---------- */
-function renderAll() {
-  refreshMethods();
-  if (currentTab === 'ledger') renderLedger();
-  if (currentTab === 'budget') renderBudget();
-  if (currentTab === 'settings') renderSettings();
-}
-$('fmDate').value = todayISO();
-$('month').value = todayISO().slice(0, 7);
-fillFormCats();
-refreshUserSelects();
-save();
-renderAll();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
