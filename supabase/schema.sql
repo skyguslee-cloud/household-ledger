@@ -216,3 +216,9 @@ revoke execute on function public.ledger_alias_login(text, text), public.ledger_
   public.ledger_alias_get(), public.ledger_alias_remove() from public;
 grant execute on function public.ledger_alias_login(text, text), public.ledger_alias_set(text, text),
   public.ledger_alias_get(), public.ledger_alias_remove() to anon, authenticated;
+
+-- ===== 사용자 캐릭터(이모지) =====
+-- users 와 같은 순서로 사용자마다 이모지 하나 (빈 문자열이면 기본 배지)
+alter table public.ledger_spaces
+  add column avatars jsonb not null default '[]'::jsonb
+  check (jsonb_typeof(avatars) = 'array' and jsonb_array_length(avatars) <= 5 and length(avatars::text) <= 200);

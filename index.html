@@ -405,6 +405,19 @@
     <h2>누구세요?</h2>
     <p class="muted">이 기기에서 입력하는 내역은 고른 사람 이름으로 자동 기록됩니다. 나중에 위쪽 이름을 눌러 바꿀 수 있어요.</p>
     <div class="me-grid" id="meChoices"></div>
+    <p class="hint">캐릭터(이모지)는 더보기 → 설정 → 사용자 이름에서 고를 수 있어요.</p>
+  </form>
+</dialog>
+
+<!-- 사용자 캐릭터 고르기 -->
+<dialog id="avDlg">
+  <form method="dialog">
+    <h2 id="avTitle">캐릭터 고르기</h2>
+    <div class="av-grid" id="avGrid"></div>
+    <div class="dlg-actions">
+      <button class="btn ghost" value="none">기본 배지로</button>
+      <button class="btn" value="cancel">닫기</button>
+    </div>
   </form>
 </dialog>
 
@@ -463,7 +476,8 @@
     </ol>
     <h3>4. 보고 고치기</h3>
     <ul>
-      <li><b>홈</b>: 이번 달 분류별 합계. 블록을 누르면 내역이 펼쳐지고, ✎로 고치고 🗑로 지웁니다.</li>
+      <li><b>홈</b>: 이번 달 분류별 합계. 큰 금액은 <b>만원 단위</b>(예: 160만원)로 짧게 보여요. 블록을 누르면 정확한 금액과 누가·어떻게 썼는지가 펼쳐지고, ✎로 고치고 🗑로 지웁니다.</li>
+      <li>더보기 → 설정 → 사용자 이름에서 <b>캐릭터</b>를 눌러 나를 나타낼 이모지를 고를 수 있어요.</li>
       <li>잘못 지웠다면 아래에 잠깐 뜨는 <b>되돌리기</b>를 누르세요.</li>
       <li><b>내역</b>: 전체 목록. 사람별, 수입/지출별로 골라 볼 수 있어요.</li>
       <li><b>더보기 → 개인별 통계</b>: 사람을 고르면 그 사람의 이번 달 수입·지출, 분류별 지출, 최근 6개월, 많이 쓴 곳, 가족 비교를 봅니다.</li>

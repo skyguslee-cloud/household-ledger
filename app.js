@@ -69,6 +69,28 @@ const ISSUERS = ['KB국민카드', 'KB국민은행', 'KB국민', '국민카드',
 const $ = id => document.getElementById(id);
 const fmt = n => Math.abs(n).toLocaleString('ko-KR');
 const won = n => (n < 0 ? '-' : '') + fmt(n) + '원';
+// 큰 숫자를 만원 단위로 짧게: 4,500 / 23.8만 / 160만 / 1억 2,440만 (뒤에 '원'은 붙이지 않음)
+function man(n) {
+  const a = Math.abs(n), s = n < 0 ? '-' : '';
+  if (a < 10000) return s + fmt(a);
+  if (a >= 1e8) { const r = Math.round((a % 1e8) / 1e4); return `${s}${Math.floor(a / 1e8)}억${r ? ' ' + r.toLocaleString('ko-KR') + '만' : ''}`; }
+  const m = a / 1e4;
+  return s + (m >= 100 ? Math.round(m).toLocaleString('ko-KR') : String(Math.round(m * 10) / 10)) + '만';
+}
+// 분류 아이콘 (컬러 이모지)
+const CAT_EMOJI = {
+  '식비': '🍚', '카페/간식': '☕', '편의점/마트/잡화': '🛒', '쇼핑': '🛍️', '의류쇼핑': '👕', '생활': '🧺', '주거/통신': '🏠',
+  '교통/자동차': '🚗', '의료/건강': '💊', '미용': '💇', '문화/여가': '🎬', '여행/숙박': '✈️', '교육': '📚', '자녀/육아': '🧸',
+  '용돈': '💌', '반려동물': '🐾', '경조/선물': '🎁', '보험/세금/금융': '🧾', '자동차보험/세금': '🚙', '재산세': '🏛️',
+  '가전/가구': '🛋️', '기부/후원': '🤝', '미분류': '❔',
+  '급여': '💰', '상여금': '🎉', '금융수입': '📈', '사업/부수입': '💼', '환급/캐시백': '🪙', '기타수입': '💵',
+  '내계좌이체': '🔁', '저축/투자': '🐷', '카드대금': '💳', '대출상환': '🏦', '기타이체': '🔀'
+};
+const ce = c => `<span class="ce" aria-hidden="true">${CAT_EMOJI[c] || '🏷️'}</span>`;
+const catLabel = c => ce(c) + esc(c);
+// 사용자 캐릭터로 고를 수 있는 이모지
+const AVATARS = ['🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🦄', '🐳', '🐬', '🐢', '🦖',
+  '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '😀', '😎', '🤓', '🥳', '😺', '👻', '🤖', '🌟', '🌸', '🍀', '⚽', '🎸', '🎮'];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(2, '0');
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -115,7 +137,7 @@ function friendlyError(e) {
 }
 
 /* ---------- 상태 ---------- */
-const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], rules: {}, recurring: [], budgetCarried: null });
+const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], avatars: ['', '', '', '', ''], rules: {}, recurring: [], budgetCarried: null });
 let state = emptyState();
 
 /* =========================================================
@@ -169,6 +191,7 @@ async function loadAll() {
   const s = emptyState();
   if (Array.isArray(spaces[0].users) && spaces[0].users.length === 5) s.users = spaces[0].users;
   s.rules = spaces[0].rules || {};
+  if (Array.isArray(spaces[0].avatars)) s.avatars = [0, 1, 2, 3, 4].map(i => String(spaces[0].avatars[i] || ''));
   s.budgetCarried = spaces[0].budget_carried || null;
   s.items = entries.map(fromRow);
   budgets.forEach(b => { const t = b.kind === 'month' ? s.budgets : s.annualBudgets; (t[b.period] ||= {})[b.category] = Number(b.amount); });
@@ -200,7 +223,7 @@ async function deleteEntry(id) {
   state.items = state.items.filter(i => i.id !== id);
 }
 async function saveSpace() {
-  await q(sb.from('ledger_spaces').update({ users: state.users, rules: state.rules }).eq('space_id', ledgerKey));
+  await q(sb.from('ledger_spaces').update({ users: state.users, avatars: state.avatars, rules: state.rules }).eq('space_id', ledgerKey));
 }
 let ruleTimer;
 function learnRule(memo, cat) {
@@ -340,6 +363,7 @@ async function importData(s) {
     await q(sb.from(t).delete().eq('space_id', ledgerKey));
   state = emptyState();
   if (Array.isArray(s.users) && s.users.length === 5) state.users = s.users.map(String);
+  if (Array.isArray(s.avatars)) state.avatars = [0, 1, 2, 3, 4].map(i => String(s.avatars[i] || ''));
   state.rules = Object.fromEntries(Object.entries(s.rules || {}).map(([k, v]) => [k, RENAMED[v] || v]));
   await saveSpace();
   for (const r of s.recurring || [])
@@ -367,7 +391,8 @@ const typeOptions = sel => Object.entries(TYPES).map(([k, v]) => `<option value=
 const catOptions = (type, sel) => CATS[type].map(c => `<option${c === sel ? ' selected' : ''}>${c}</option>`).join('');
 const userOptions = (sel, all) => (all ? '<option value="">전체 사용자</option>' : '') +
   state.users.map((n, i) => `<option value="${i}"${String(sel) === String(i) ? ' selected' : ''}>${esc(n)}</option>`).join('');
-const userBadge = u => `<span class="user u${u}"><i>${u + 1}</i>${esc(state.users[u] ?? 'user' + (u + 1))}</span>`;
+const userIcon = u => state.avatars?.[u] ? `<i class="av">${esc(state.avatars[u])}</i>` : `<i>${u + 1}</i>`;
+const userBadge = u => `<span class="user u${u}${state.avatars?.[u] ? ' has-av' : ''}">${userIcon(u)}${esc(state.users[u] ?? 'user' + (u + 1))}</span>`;
 
 /* ---------- 이 기기 사용자 (누구세요?) ---------- */
 const ME_STORE = 'ledger-me';
@@ -490,7 +515,7 @@ function blocksHtml(type, cur, prev, total, m, yearSpent) {
     cats = cats.filter(x => !rest.includes(x));
   }
   return cats.map(x => blockHtml(type, x, total, m, yearSpent)).join('') +
-    (rest.length ? `<div class="blk more" data-act="others" data-type="${type}">+ ${rest.slice(0, 2).map(x => esc(x.c)).join(', ')}${rest.length > 2 ? ` 외 ${rest.length - 2}개` : ''}<br><b style="margin-top:4px;color:var(--text)">${won(sum(rest.map(x => x.sum)))}</b></div>` : '');
+    (rest.length ? `<div class="blk more" data-act="others" data-type="${type}">+ ${rest.slice(0, 2).map(x => catLabel(x.c)).join(', ')}${rest.length > 2 ? ` 외 ${rest.length - 2}개` : ''}<br><b style="margin-top:4px;color:var(--text)">${man(sum(rest.map(x => x.sum)))}원</b></div>` : '');
 }
 
 function blockHtml(type, x, total, m, yearSpent) {
@@ -512,7 +537,7 @@ function blockHtml(type, x, total, m, yearSpent) {
       sub = `${mom} · ${label} <input type="number" min="0" step="${isA ? 100000 : 10000}" data-budget="${esc(x.c)}" value="${b || ''}" placeholder="없음">` +
         (b ? ` ${isA ? `올해 ${fmt(used)} · ` : ''}${pct.toFixed(0)}%` + (used > b ? ` <span class="over-text">${fmt(used - b)} 초과</span>` : ` · 남음 ${fmt(b - used)}`) : '');
     } else if (b) {
-      sub = `${mom} · ${isA ? `올해 ${fmt(used)} / ` : '예산 '}${fmt(b)} 중 ${pct.toFixed(0)}%` + (used > b ? ` <span class="over-text">초과</span>` : '');
+      sub = `${mom} · ${isA ? `올해 ${man(used)} / ` : '예산 '}${man(b)} 중 ${pct.toFixed(0)}%` + (used > b ? ` <span class="over-text">초과</span>` : '');
     }
     if (b) barHtml = bar(pct, isA ? yearProgress(y) : null);
   }
@@ -528,7 +553,7 @@ function blockHtml(type, x, total, m, yearSpent) {
     return `<div class="li" data-id="${i.id}">
       <span class="dt">${i.date.slice(5).replace('-', '.')}</span>
       <span class="nm">${esc(i.memo || i.category)}</span>${srcTag(i)}${i.type === 'expense' && i.amount < 0 ? '<span class="chip">환불</span>' : ''}
-      <span class="who">${esc(state.users[i.user] ?? '')}${i.method ? ' · ' + esc(i.method) : ''}</span>
+      <span class="who">${state.avatars[i.user] ? esc(state.avatars[i.user]) + ' ' : ''}${esc(state.users[i.user] ?? '')}${i.method ? ' · ' + esc(i.method) : ''}</span>
       <span class="amt ${i.type}">${i.amount < 0 ? '+' : ''}${fmt(i.amount)}</span>
       <button class="ib" data-act="${editing ? 'cancel' : 'edit'}" title="${editing ? '닫기' : '수정'}">${editing ? '✕' : '✎'}</button>
       ${open ? `<button class="ib" data-act="del" title="삭제">🗑</button>` : ''}
@@ -537,10 +562,10 @@ function blockHtml(type, x, total, m, yearSpent) {
 
   return `<div class="blk${open ? ' open' : ''}" data-key="${esc(key)}">
     <div class="blk-head" data-act="toggle">
-      <span><span class="name">${esc(x.c)}</span>${ANNUAL_CATS.includes(x.c) && type === 'expense' ? ' <span class="chip">연간</span>' : ''} · ${share.toFixed(0)}% · ${x.items.length}건</span>
+      <span><span class="name">${catLabel(x.c)}</span>${ANNUAL_CATS.includes(x.c) && type === 'expense' ? ' <span class="chip">연간</span>' : ''} · ${share.toFixed(0)}% · ${x.items.length}건</span>
       <span class="tools">${open ? `<button class="btn sm" data-act="new">+ 내역 추가</button>` : ''}<span aria-hidden="true">${open ? '▴' : '▾'}</span></span>
     </div>
-    <div class="blk-total" data-act="toggle">${x.sum < 0 ? '-' : ''}${fmt(x.sum)}</div>
+    <div class="blk-total" data-act="toggle" title="${won(x.sum)}">${open ? (x.sum < 0 ? '-' : '') + fmt(x.sum) : man(x.sum)}</div>
     <div class="blk-sub">${sub}</div>
     ${barHtml}
     ${home.edit === 'new' && open ? editForm({ date: defaultDateFor(m), type, category: x.c, user: defaultUser(), method: '', memo: '', amount: '' }) : ''}
@@ -673,7 +698,7 @@ function renderLedger() {
   const maxC = Math.max(1, ...cats.map(c => c[1]));
   $('catRows').innerHTML = cats.length ? cats.map(([c, v]) => {
     const isA = ANNUAL_CATS.includes(c), b = isA ? annual[c] : budget[c], used = isA ? yearSpent[c] : v;
-    return `<div class="row"><span>${esc(c)}</span>${bar(v / maxC * 100).replace('bar ok', 'bar warn').replace('bar over', 'bar warn')}
+    return `<div class="row"><span>${catLabel(c)}</span>${bar(v / maxC * 100).replace('bar ok', 'bar warn').replace('bar over', 'bar warn')}
       <span class="num">${won(v)}${b && u === '' ? `<small class="${used > b ? 'over-text' : ''}">${isA ? `연 ${fmt(used)} / ${fmt(b)}` : `예산 ${fmt(b)}`}</small>` : ''}</span></div>`;
   }).join('') : '<div class="empty">지출 내역이 없습니다</div>';
 
@@ -691,7 +716,7 @@ function renderLedger() {
     const refund = i.type === 'expense' && i.amount < 0;
     return `<tr data-id="${i.id}">
       <td class="d">${i.date.slice(5).replace('-', '.')}${i.time ? `<small>${i.time}</small>` : ''}</td>
-      <td class="t"><b>${esc(i.category)}</b><span class="memo">${esc(i.memo)}</span>
+      <td class="t"><b>${catLabel(i.category)}</b><span class="memo">${esc(i.memo)}</span>
         <small>${userBadge(i.user)} · ${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${refund ? ' · <span class="chip">취소/환불</span>' : ''}${srcTag(i) ? ' · ' + srcTag(i) : ''}</small></td>
       <td class="num amt ${refund ? 'refund' : i.type}">${fmt(i.amount)}</td>
       <td class="act"><button data-act="edit" title="수정">✎</button><button data-act="del" title="삭제">✕</button></td>
@@ -1126,7 +1151,7 @@ function renderStats() {
   const cats = Object.entries(byCat).filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
   const maxC = Math.max(1, ...cats.map(c => c[1]));
   $('stCatTitle').textContent = `${mo}월 분류별 지출`;
-  $('stCats').innerHTML = cats.length ? cats.map(([c, v]) => `<div class="row"><span>${esc(c)}</span>
+  $('stCats').innerHTML = cats.length ? cats.map(([c, v]) => `<div class="row"><span>${catLabel(c)}</span>
       ${bar(v / maxC * 100).replace(/bar (ok|over)/, 'bar warn')}
       <span class="num">${won(v)}<small>${exp > 0 ? (v / exp * 100).toFixed(0) + '%' : ''}</small></span></div>`).join('')
     : '<div class="empty">이 달 지출이 없습니다</div>';
@@ -1195,7 +1220,7 @@ function renderBudget() {
   let tb = 0, ts = 0;
   $('budgetBody').innerHTML = MONTHLY_CATS.map(c => {
     const b = budget[c] || 0, s = spent[c] || 0; tb += b; ts += s;
-    return `<tr><td>${c}</td>
+    return `<tr><td>${catLabel(c)}</td>
       <td class="num"><input type="number" min="0" step="10000" data-cat="${c}" value="${b || ''}" placeholder="—"></td>
       <td class="num">${s ? won(s) : '<small>0원</small>'}</td>
       <td class="num">${b ? `<span class="${b - s < 0 ? 'over-text' : ''}">${won(b - s)}</span>` : '<small>—</small>'}</td>
@@ -1229,7 +1254,7 @@ function renderAnnual() {
   const cell = (s, b) => b ? bar(s / b * 100, yp) + `<small>${(s / b * 100).toFixed(0)}%</small>` : '';
   $('annualBody').innerHTML = ANNUAL_CATS.map(c => {
     const b = budget[c] || 0, s = ys[c] || 0, mm = ms[c] || 0; tb += b; ts += s; tm += mm;
-    return `<tr><td>${c}</td>
+    return `<tr><td>${catLabel(c)}</td>
       <td class="num"><input type="number" min="0" step="100000" data-acat="${c}" value="${b || ''}" placeholder="—"></td>
       <td class="num">${s ? won(s) : '<small>0원</small>'}</td>
       <td class="num">${mm ? won(mm) : '<small>0원</small>'}</td>
@@ -1411,7 +1436,8 @@ function renderSettings() {
   $('keyView').value = keyShown ? ledgerKey : '•'.repeat(24);
   $('keyToggle').textContent = keyShown ? '숨기기' : '보기';
   $('userNames').innerHTML = state.users.map((n, i) =>
-    `<label>${userBadge(i)}<input data-u="${i}" value="${esc(n)}" maxlength="12" style="width:100%;margin-top:6px"></label>`).join('');
+    `<div class="un"><div class="un-head">${userBadge(i)}<button type="button" class="av-pick" data-av="${i}">${state.avatars[i] ? '바꾸기' : '캐릭터'}</button></div>
+      <input data-u="${i}" value="${esc(n)}" maxlength="12" aria-label="${i + 1}번 사용자 이름" style="width:100%;margin-top:6px"></div>`).join('');
   $('importLocal').hidden = !localOldData();
   renderAlias(); loadAlias();
 }
@@ -1423,6 +1449,25 @@ $('userNames').addEventListener('change', async e => {
   try { await run('이름 저장', saveSpace); } catch {}
   refreshUserSelects(); renderSettings();
 });
+// 사용자 캐릭터 고르기
+let avTarget = null;
+$('userNames').addEventListener('click', e => {
+  const b = e.target.closest('[data-av]'); if (!b) return;
+  avTarget = +b.dataset.av;
+  $('avTitle').textContent = `${state.users[avTarget]}의 캐릭터`;
+  $('avGrid').innerHTML = AVATARS.map(a => `<button value="${a}" class="${state.avatars[avTarget] === a ? 'on' : ''}">${a}</button>`).join('');
+  $('avDlg').showModal();
+});
+$('avDlg').addEventListener('close', async () => {
+  const v = $('avDlg').returnValue; $('avDlg').returnValue = '';
+  if (avTarget == null || !v || v === 'cancel') return;
+  if (v !== 'none' && !AVATARS.includes(v)) return;
+  const before = state.avatars[avTarget];
+  state.avatars[avTarget] = v === 'none' ? '' : v;
+  try { await run('캐릭터 저장', saveSpace); } catch { state.avatars[avTarget] = before; }
+  refreshUserSelects(); renderSettings();
+});
+$('avDlg').addEventListener('click', e => { if (outsideDialog(e, $('avDlg'))) $('avDlg').close('cancel'); });
 function download(name, content, type) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([content], { type }));
@@ -1430,8 +1475,8 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $('exportJson').onclick = () => {
-  const { items, budgets, annualBudgets, users, rules, recurring } = state;
-  download(`가계부_백업_${todayISO()}.json`, JSON.stringify({ version: 3, items: items.map(({ id, ...i }) => i), budgets, annualBudgets, users, rules, recurring }, null, 2), 'application/json');
+  const { items, budgets, annualBudgets, users, avatars, rules, recurring } = state;
+  download(`가계부_백업_${todayISO()}.json`, JSON.stringify({ version: 3, items: items.map(({ id, ...i }) => i), budgets, annualBudgets, users, avatars, rules, recurring }, null, 2), 'application/json');
 };
 $('importJson').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
@@ -1664,7 +1709,7 @@ function renderQaCats() {
   const list = catsByUse(qaType), shown = qaShowAll ? list : list.slice(0, 8);
   if (!list.includes(qaCat)) qaCat = list[0];
   if (!shown.includes(qaCat)) shown.push(qaCat);
-  $('qaCats').innerHTML = shown.map(c => `<button type="button" data-c="${esc(c)}" class="${c === qaCat ? 'on' : ''}">${esc(c)}</button>`).join('') +
+  $('qaCats').innerHTML = shown.map(c => `<button type="button" data-c="${esc(c)}" class="${c === qaCat ? 'on' : ''}">${catLabel(c)}</button>`).join('') +
     (list.length > shown.length ? `<button type="button" class="more" data-c="__all">전체 ${list.length}개 ▾</button>` : '');
 }
 function setQaType(t) {

@@ -396,3 +396,24 @@ dialog.sheet.tall { max-width: 640px; width: min(640px, 100vw); }
 @media (max-width: 480px) {
   .alias-set { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 분류 아이콘 (컬러 이모지) */
+.ce { display: inline-block; width: 1.35em; margin-right: 4px; text-align: center; font-style: normal; line-height: 1; }
+.chips .ce, #qaCats .ce { width: auto; margin-right: 3px; }
+
+/* 홈 블록: 닫혀 있을 땐 날짜·내용·금액만 (사용자·결제수단은 펼치면 보임) */
+.blk:not(.open) .li .who { display: none; }
+.li .nm { min-width: 3em; }
+.li .amt { flex: none; }
+.blk-total { white-space: nowrap; }
+
+/* 사용자 캐릭터 */
+.user i.av { border: none; background: none !important; color: inherit; font-size: 1rem; width: 20px; height: 20px; }
+.un-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.av-pick { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: .72rem; cursor: pointer; }
+.av-pick:hover { color: var(--text); border-color: var(--strong); }
+.av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin: 4px 0 16px; }
+.av-grid button { font-size: 1.5rem; aspect-ratio: 1; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; cursor: pointer; padding: 0; }
+.av-grid button:hover { border-color: var(--strong); }
+.av-grid button.on { border: 2px solid var(--strong); background: var(--soft); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
