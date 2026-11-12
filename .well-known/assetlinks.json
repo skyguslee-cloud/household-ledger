@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.householdledger",
+        "sha256_cert_fingerprints": ["1A:64:E7:31:E9:46:40:A4:C4:D0:B6:E1:70:24:2E:F6:2C:8D:AD:C2:E9:A1:3A:3F:34:71:19:83:31:34:06:7E"]
+      }
+    }]
