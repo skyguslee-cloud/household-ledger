@@ -469,3 +469,16 @@ dialog.sheet.tall { max-width: 640px; width: min(640px, 100vw); }
 /* 카드 할부 */
 .rec.inst .bar { margin-top: 8px; max-width: 320px; }
 #instSum { font-size: .85rem; }
+
+/* 여러 가계부 */
+.book-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font: inherit; color: inherit; border-radius: 6px; }
+.book-btn:focus-visible { outline: 2px solid var(--strong); outline-offset: 2px; }
+.book-btn i { font-style: normal; font-size: .6em; color: var(--muted); }
+.book-list { margin: 10px 0 4px; }
+.book { display: flex; align-items: center; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.book:last-child { border-bottom: none; }
+.book-open { all: unset; cursor: pointer; flex: 1; min-width: 0; }
+.book-open b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-open small { display: block; color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.book.on .book-open b::before { content: '✓ '; }
+#gateBack { margin-top: 8px; }

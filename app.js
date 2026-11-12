@@ -436,7 +436,7 @@ $('meDlg').addEventListener('cancel', e => { if ($('meDlg').dataset.first) e.pre
 $('meDlg').addEventListener('close', () => {
   const v = $('meDlg').returnValue;
   if (v === '' || v == null || isNaN(+v)) return;
-  lsSet(ME_STORE, String(+v));
+  lsSet(ME_STORE, String(+v)); saveBookMe();
   refreshUserSelects(); renderAll();
   toast(`${state.users[+v]} 님으로 입력합니다`);
 });
@@ -1867,8 +1867,10 @@ $('exportCsv').onclick = () => {
 };
 $('disconnect').onclick = () => {
   if (!confirm('이 기기에서 가계부 연결을 해제할까요?\n데이터는 DB에 그대로 있고, 키나 초대 링크로 다시 연결할 수 있습니다.')) return;
-  stopLive(); lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState(); myAlias = undefined;
-  showGate();
+  stopLive(); forgetBook(ledgerKey);
+  lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState(); myAlias = undefined;
+  const rest = books();
+  if (rest.length) switchBook(rest[0].key); else showGate();
 };
 $('clearAll').onclick = async () => {
   if (!confirm('모든 내역, 예산, 고정 항목, 학습된 분류를 DB에서 삭제할까요? 가족 모두에게서 사라지며 되돌릴 수 없습니다.')) return;
@@ -1879,26 +1881,101 @@ $('clearAll').onclick = async () => {
 /* =========================================================
    연결 / 시작
    ========================================================= */
+/* ---------- 여러 가계부 ----------
+   이 기기에 연결한 가계부 목록 [{ key, name, me }] — 이름과 '나'는 가계부마다 이 기기에만 저장 */
+const BOOKS_STORE = 'ledger-books';
+let pendingBookName = null;
+function books() {
+  try { const a = JSON.parse(lsGet(BOOKS_STORE) || '[]'); return Array.isArray(a) ? a.filter(b => b && typeof b.key === 'string') : []; }
+  catch { return []; }
+}
+const saveBooks = a => lsSet(BOOKS_STORE, JSON.stringify(a));
+const bookOf = k => books().find(b => b.key === k);
+function rememberBook(key) {
+  const a = books();
+  let b = a.find(x => x.key === key);
+  if (!b) {
+    b = { key, name: pendingBookName ? `${pendingBookName} 가계부` : a.length ? `가계부 ${a.length + 1}` : '우리집 가계부' };
+    a.push(b);
+  }
+  pendingBookName = null;
+  b.me = me();
+  saveBooks(a); renderBookName();
+}
+function forgetBook(key) { saveBooks(books().filter(b => b.key !== key)); }
+function saveBookMe() {
+  const a = books(), b = a.find(x => x.key === ledgerKey);
+  if (b) { b.me = me(); saveBooks(a); }
+}
+function renderBookName() { $('bookName').textContent = bookOf(ledgerKey)?.name || '우리집 가계부'; }
+function renderBooks() {
+  $('bookList').innerHTML = books().map(b => `<div class="book${b.key === ledgerKey ? ' on' : ''}" data-key="${esc(b.key)}">
+      <button type="button" class="book-open" data-bk="open"><b>${esc(b.name)}</b>
+        <small>${b.key === ledgerKey ? '지금 보는 가계부' : b.me != null ? '눌러서 열기' : '눌러서 열기 · 처음이면 누구인지 고르기'}</small></button>
+      <button type="button" class="btn sm ghost" data-bk="rename">이름</button>
+      ${b.key === ledgerKey ? '' : '<button type="button" class="btn sm ghost" data-bk="remove">빼기</button>'}
+    </div>`).join('');
+}
+$('bookBtn').onclick = () => { if (!ledgerKey || $('app').hidden) return; renderBooks(); $('bookDlg').showModal(); };
+$('bookDlg').addEventListener('click', e => { if (outsideDialog(e, $('bookDlg'))) $('bookDlg').close('cancel'); });
+$('bookList').addEventListener('click', e => {
+  const act = e.target.closest('[data-bk]')?.dataset.bk; if (!act) return;
+  const key = e.target.closest('.book').dataset.key, a = books(), b = a.find(x => x.key === key);
+  if (!b) return;
+  if (act === 'open') { $('bookDlg').close(); if (key !== ledgerKey) switchBook(key); }
+  else if (act === 'rename') {
+    const n = prompt('가계부 이름 (이 기기에서만 보여요)', b.name);
+    if (n && n.trim()) { b.name = n.trim().slice(0, 20); saveBooks(a); renderBooks(); renderBookName(); }
+  } else if (act === 'remove') {
+    if (!confirm(`'${b.name}'을(를) 이 기기 목록에서 뺄까요?\n가계부 데이터는 그대로 있고, 초대 링크나 별칭으로 다시 추가할 수 있어요.`)) return;
+    forgetBook(key); renderBooks();
+  }
+});
+$('bookAdd').onclick = () => {
+  $('bookDlg').close(); saveBookMe(); stopLive(); sb = null;
+  $('aliasForm').hidden = true; $('gateMain').hidden = false; $('gateKey').value = '';
+  showGate();
+};
+$('gateBack').onclick = () => { const k = lsGet(KEY_STORE); if (k) switchBook(k); };
+async function switchBook(key) {
+  saveBookMe();
+  if (!$('fmCancel').hidden) $('fmCancel').click();
+  home.open = home.edit = null; planDraft = null; myAlias = undefined;
+  $('fQuery').value = ''; $('month').value = thisMonth(); impReset();
+  $('aliasForm').hidden = true; $('gateMain').hidden = false;
+  if (await connect(key)) { switchTab('home'); toast(`‘${bookOf(key)?.name || '가계부'}’로 바꿨어요`); }
+}
+
 function showGate(msg = '') {
   $('app').hidden = true; $('monthNav').hidden = true; $('meBtn').hidden = true; $('gate').hidden = false;
   $('gateMsg').textContent = msg;
+  const k = lsGet(KEY_STORE);
+  $('gateBack').hidden = !(k && bookOf(k));
   setSync('연결 안 됨', '');
 }
 function showApp() {
   $('gate').hidden = true; $('app').hidden = false; $('monthNav').hidden = false;
 }
 async function connect(key) {
+  // '나'는 가계부마다 따로: 목록에 있으면 그 값, 처음 보는 가계부면 다시 물음
+  const book = bookOf(key);
+  if (book) lsSet(ME_STORE, book.me != null ? String(book.me) : null);
+  else if (key !== lsGet(KEY_STORE)) lsSet(ME_STORE, null);
+  stopLive();
   ledgerKey = key; sb = makeClient(key);
   setSync('불러오는 중…', 'busy');
   try {
     await loadAll();
   } catch (e) {
     console.error(e);
-    if (e.code === 'NOT_FOUND') { lsSet(KEY_STORE, null); showGate('이 키로 된 가계부가 없습니다. 키를 다시 확인하세요.'); }
+    if (e.code === 'NOT_FOUND') {
+      forgetBook(key); if (lsGet(KEY_STORE) === key) lsSet(KEY_STORE, null);
+      showGate('이 키로 된 가계부가 없습니다. 키를 다시 확인하세요.');
+    }
     else { $('gateKey').value = key; showGate(`연결하지 못했습니다. ${friendlyError(e)}`); }
     return false;
   }
-  lsSet(KEY_STORE, key);
+  lsSet(KEY_STORE, key); rememberBook(key);
   showApp(); refreshUserSelects(); resetRecForm(); fillInstForm();
   if (me() == null) openMeDialog(true);   // 처음 접속: 누구인지 고르기
   try { await generateRecurring(); } catch (e) { console.error(e); }
@@ -1933,7 +2010,13 @@ $('reqForm').addEventListener('submit', async e => {
   }
 });
 $('gateJoin').onclick = () => {
-  const k = $('gateKey').value.trim().replace(/^.*#k=/, '');
+  const raw = $('gateKey').value.trim();
+  // 별칭(예: haha) 또는 별칭 주소(…/#haha)면 비밀번호 화면으로
+  let a = raw.replace(/^.*#/, '');
+  try { a = decodeURIComponent(a); } catch {}
+  a = a.trim().toLowerCase();
+  if (!/k=/.test(raw) && ALIAS_RE.test(a)) return showAliasGate(a);
+  const k = raw.replace(/^.*#k=/, '');
   if (k.length < 20) return ($('gateMsg').textContent = '키가 너무 짧습니다. 받은 키나 초대 링크 전체를 붙여넣으세요.');
   connect(k);
 };
@@ -1968,7 +2051,8 @@ $('aliasForm').addEventListener('submit', async e => {
     if (r?.status === 'ok') {
       if (r.key !== lsGet(KEY_STORE)) lsSet(ME_STORE, null);   // 다른 가계부면 "누구세요?"를 다시 물음
       $('aliasMsg').textContent = '';
-      await connect(r.key);
+      if (!bookOf(r.key)) pendingBookName = gateAlias;
+      if (await connect(r.key)) { $('aliasForm').hidden = true; $('gateMain').hidden = false; }
     } else if (r?.status === 'locked') {
       $('aliasMsg').textContent = `여러 번 틀려서 잠겼어요. ${waitText(r.wait)} 뒤에 다시 해 주세요.`;
     } else {
@@ -2045,7 +2129,7 @@ async function refresh({ auto = false } = {}) {
   } catch (e) {
     console.error(e);
     if (e.code === 'NOT_FOUND') {   // 가계부가 없어졌으면 연결 화면으로
-      stopLive(); lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
+      stopLive(); forgetBook(ledgerKey); lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
       showGate('이 가계부를 찾을 수 없습니다. 초대 링크를 다시 받아 주세요.');
     } else { setSync('연결 안 됨 · 눌러서 다시 시도', 'err'); if (!auto) toast(friendlyError(e)); }
   }

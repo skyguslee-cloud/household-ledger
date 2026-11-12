@@ -21,7 +21,7 @@
     <div class="brand">
       <span class="logo">₩</span>
       <div>
-        <h1>우리집 가계부</h1>
+        <h1><button type="button" class="book-btn" id="bookBtn" title="가계부 바꾸기·추가"><span id="bookName">우리집 가계부</span><i aria-hidden="true">▾</i></button></h1>
         <button type="button" class="sync" id="sync" title="눌러서 새로고침"><i></i><span>연결 전</span></button>
       </div>
     </div>
@@ -52,12 +52,13 @@
       </form>
       <div id="gateMain">
       <h2>가계부 연결</h2>
-      <p class="muted">가족에게 받은 <b>초대 링크</b>를 누르면 바로 들어와집니다.<br>링크 대신 <b>가계부 키</b>를 받았다면 아래에 붙여넣으세요.</p>
+      <p class="muted">가족에게 받은 <b>초대 링크</b>를 누르면 바로 들어와집니다.<br>링크 대신 <b>가계부 키</b>나 <b>별칭</b>(예: haha)을 받았다면 아래에 넣으세요.</p>
       <div class="field-row">
-        <input id="gateKey" placeholder="초대 링크 또는 가계부 키 붙여넣기" autocomplete="off" spellcheck="false">
+        <input id="gateKey" placeholder="초대 링크, 가계부 키 또는 별칭" autocomplete="off" spellcheck="false">
         <button class="btn primary" id="gateJoin">연결</button>
       </div>
       <p class="hint" id="gateMsg"></p>
+      <button type="button" class="btn ghost block" id="gateBack" hidden>‹ 내 가계부로 돌아가기</button>
       <div class="or"><span>처음 쓰시나요?</span></div>
       <button class="btn ghost block" id="gateCreate">새 가계부 사용 신청하기</button>
       <form id="reqForm" class="req" hidden>
@@ -542,6 +543,20 @@
   </form>
 </dialog>
 
+<!-- 가계부 고르기 (한 사람이 여러 가계부) -->
+<dialog id="bookDlg">
+  <form method="dialog">
+    <h2>내 가계부</h2>
+    <p class="muted">이 기기에 연결된 가계부예요. 눌러서 바꿔 볼 수 있어요.</p>
+    <div class="book-list" id="bookList"></div>
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="bookAdd">＋ 다른 가계부 추가</button>
+      <button class="btn ghost" value="cancel">닫기</button>
+    </div>
+    <p class="hint">이름은 이 기기에서만 보여요. 같은 가계부라도 가족마다 다르게 부를 수 있어요.</p>
+  </form>
+</dialog>
+
 <!-- 사용자 캐릭터 고르기 -->
 <dialog id="avDlg">
   <form method="dialog">
@@ -593,6 +608,8 @@
       <li><b>별칭 주소</b>(주소/#별칭)를 받았다면 열고 비밀번호를 한 번 넣으세요. 별칭은 더보기 → 설정 → 별칭 주소에서 정합니다.</li>
       <li><b>누구세요?</b> 창에서 내 이름을 고르세요. 이 기기에서 적는 내역은 그 이름으로 기록됩니다.</li>
       <li>이름을 잘못 골랐다면 위쪽 <b>내 이름</b>을 눌러 바꾸면 됩니다.</li>
+      <li>안드로이드 앱이나 홈 화면 앱으로 처음 열면, 연결 칸에 <b>별칭</b>(예: haha)을 넣고 비밀번호를 넣으면 돼요.</li>
+      <li><b>가계부가 여러 개</b>라면 맨 위 가계부 이름(▾)을 눌러 바꾸거나 <b>＋ 다른 가계부 추가</b>를 누르세요. 가계부마다 내 이름을 따로 기억해요.</li>
     </ol>
     <h3>2. 돈 쓴 것 적기</h3>
     <ol>
