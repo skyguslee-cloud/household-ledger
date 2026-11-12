@@ -1413,6 +1413,7 @@ function renderSettings() {
   $('userNames').innerHTML = state.users.map((n, i) =>
     `<label>${userBadge(i)}<input data-u="${i}" value="${esc(n)}" maxlength="12" style="width:100%;margin-top:6px"></label>`).join('');
   $('importLocal').hidden = !localOldData();
+  renderAlias(); loadAlias();
 }
 $('keyToggle').onclick = () => { keyShown = !keyShown; renderSettings(); };
 $('copyInvite').onclick = () => copyText(inviteLink(), '초대 링크를 복사했습니다');
@@ -1455,7 +1456,7 @@ $('exportCsv').onclick = () => {
 };
 $('disconnect').onclick = () => {
   if (!confirm('이 기기에서 가계부 연결을 해제할까요?\n데이터는 DB에 그대로 있고, 키나 초대 링크로 다시 연결할 수 있습니다.')) return;
-  lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState();
+  lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState(); myAlias = undefined;
   showGate();
 };
 $('clearAll').onclick = async () => {
@@ -1526,6 +1527,95 @@ $('gateJoin').onclick = () => {
   connect(k);
 };
 $('gateKey').addEventListener('keydown', e => { if (e.key === 'Enter') $('gateJoin').click(); });
+
+/* ---------- 별칭 주소 (주소/#별칭 + 비밀번호) ---------- */
+const ALIAS_RE = /^[a-z0-9가-힣]{1,4}$/;
+let gateAlias = null;
+function hashAlias() {
+  let h = location.hash.slice(1);
+  try { h = decodeURIComponent(h); } catch { return null; }
+  h = h.trim().toLowerCase();
+  return ALIAS_RE.test(h) ? h : null;
+}
+const waitText = s => s >= 3600 ? `${Math.ceil(s / 3600)}시간` : `${Math.max(1, Math.ceil(s / 60))}분`;
+function showAliasGate(alias, msg = '') {
+  gateAlias = alias;
+  $('aliasTitle').textContent = `‘${alias}’ 가계부`;
+  $('aliasForm').hidden = false; $('gateMain').hidden = true;
+  showGate();
+  $('aliasMsg').textContent = msg;
+  $('aliasPin').value = ''; $('aliasPin').focus();
+}
+$('aliasOther').onclick = () => { $('aliasForm').hidden = true; $('gateMain').hidden = false; $('gateMsg').textContent = ''; };
+$('aliasForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pin = $('aliasPin').value.trim();
+  if (!/^\d{4,8}$/.test(pin)) return ($('aliasMsg').textContent = '비밀번호는 숫자 4~8자리예요.');
+  $('aliasEnter').disabled = true; $('aliasMsg').textContent = '확인하는 중…';
+  try {
+    const r = await q(makeClient('').rpc('ledger_alias_login', { p_alias: gateAlias, p_pin: pin }));
+    if (r?.status === 'ok') {
+      if (r.key !== lsGet(KEY_STORE)) lsSet(ME_STORE, null);   // 다른 가계부면 "누구세요?"를 다시 물음
+      $('aliasMsg').textContent = '';
+      await connect(r.key);
+    } else if (r?.status === 'locked') {
+      $('aliasMsg').textContent = `여러 번 틀려서 잠겼어요. ${waitText(r.wait)} 뒤에 다시 해 주세요.`;
+    } else {
+      $('aliasMsg').textContent = '별칭이나 비밀번호가 맞지 않아요.';
+      $('aliasPin').select();
+    }
+  } catch (err) {
+    console.error(err);
+    $('aliasMsg').textContent = `확인하지 못했습니다. ${friendlyError(err)}`;
+  } finally { $('aliasEnter').disabled = false; }
+});
+
+// 설정 화면의 "별칭 주소" 카드
+const aliasLink = a => `${location.origin}${location.pathname}#${encodeURIComponent(a)}`;
+let myAlias, aliasErr = false;   // myAlias — undefined: 불러오는 중, null: 없음
+async function loadAlias() {
+  if (!sb) return;
+  try { myAlias = await q(sb.rpc('ledger_alias_get')); aliasErr = false; }
+  catch (e) { console.error(e); aliasErr = true; }
+  renderAlias();
+}
+function renderAlias() {
+  const has = !!myAlias;
+  $('aliasNow').innerHTML = aliasErr ? '별칭을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'
+    : myAlias === undefined ? '불러오는 중…'
+    : has ? `지금 별칭은 <b>${esc(myAlias)}</b> 입니다. 바꾸려면 아래에 새로 적으세요.` : '아직 별칭이 없어요. 별칭과 비밀번호를 정해 보세요.';
+  $('aliasLinkRow').hidden = !has; $('aliasRemove').hidden = !has;
+  if (has) $('aliasLink').value = `${location.origin}${location.pathname}#${myAlias}`;   // 보기 좋게 (복사는 인코딩된 주소)
+}
+const ALIAS_MSG = {
+  taken: '이미 다른 가계부가 쓰는 별칭이에요. 다른 별칭을 골라 주세요.',
+  bad_alias: '별칭은 한글·영문 소문자·숫자로 1~4글자만 쓸 수 있어요.',
+  bad_pin: '비밀번호는 숫자 4~8자리로 정해 주세요.',
+  easy_pin: '너무 쉬운 비밀번호예요. 같은 숫자 반복이나 1234 같은 연속 숫자는 쓸 수 없어요.',
+  denied: '이 가계부에서 별칭을 정할 권한이 없어요. 다시 연결해 주세요.'
+};
+$('copyAlias').onclick = () => copyText(aliasLink(myAlias), '별칭 주소를 복사했습니다');
+$('aliasSetForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const a = $('aliasNew').value.trim().toLowerCase(), p = $('aliasNewPin').value.trim();
+  const local = !ALIAS_RE.test(a) ? 'bad_alias' : !/^\d{4,8}$/.test(p) ? 'bad_pin' : null;
+  if (local) return ($('aliasSetMsg').textContent = ALIAS_MSG[local]);
+  $('aliasSave').disabled = true; $('aliasSetMsg').textContent = '저장하는 중…';
+  try {
+    const r = await q(sb.rpc('ledger_alias_set', { p_alias: a, p_pin: p }));
+    if (r?.status === 'ok') {
+      myAlias = r.alias; $('aliasNew').value = ''; $('aliasNewPin').value = '';
+      $('aliasSetMsg').textContent = ''; renderAlias();
+      toast('별칭을 저장했습니다. 비밀번호는 가족에게만 알려주세요');
+    } else $('aliasSetMsg').textContent = ALIAS_MSG[r?.status] || '저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
+  } catch (err) {
+    console.error(err); $('aliasSetMsg').textContent = `저장하지 못했어요. ${friendlyError(err)}`;
+  } finally { $('aliasSave').disabled = false; }
+});
+$('aliasRemove').onclick = async () => {
+  if (!confirm(`별칭 ‘${myAlias}’을(를) 없앨까요?\n별칭 주소로는 더 이상 들어올 수 없고, 초대 링크는 그대로 쓸 수 있습니다.`)) return;
+  try { await run('별칭 없애기', () => q(sb.rpc('ledger_alias_remove'))); myAlias = null; renderAlias(); toast('별칭을 없앴습니다'); } catch {}
+};
 
 /* ---------- 다른 가족이 입력한 내용 반영 (새로고침) ---------- */
 let refreshing = false;
@@ -1673,6 +1763,16 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:')
   }
   const hash = location.hash.match(/k=([\w-]{20,100})/);
   if (hash) history.replaceState(null, '', location.pathname + location.search);
-  const key = hash?.[1] || lsGet(KEY_STORE);
+  const alias = hash ? null : hashAlias();   // 별칭 주소는 즐겨찾기/홈 화면용으로 주소에 그대로 둠
+  const stored = lsGet(KEY_STORE);
+  if (alias) {
+    if (!stored) return showAliasGate(alias);
+    // 이 기기에 저장된 가계부가 같은 별칭이면 바로 접속, 아니면 비밀번호를 물음
+    q(makeClient(stored).rpc('ledger_alias_get'))
+      .then(a => a === alias ? connect(stored) : showAliasGate(alias))
+      .catch(() => connect(stored));
+    return;
+  }
+  const key = hash?.[1] || stored;
   if (key) connect(key); else showGate();
 })();
