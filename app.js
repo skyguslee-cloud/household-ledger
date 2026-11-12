@@ -93,7 +93,7 @@ const AVATARS = ['🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
   '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '😀', '😎', '🤓', '🥳', '😺', '👻', '🤖', '🌟', '🌸', '🍀', '⚽', '🎸', '🎮'];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(2, '0');
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const todayISO = (d = new Date()) => { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const thisMonth = () => todayISO().slice(0, 7);
 const sum = arr => arr.reduce((a, b) => a + b, 0);
 const daysIn = (y, m) => new Date(y, m, 0).getDate();
@@ -149,6 +149,7 @@ let sb = null, ledgerKey = null, lastLoad = 0;
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+const BACKUP_AT = 'ledger-backup-at', BACKUP_SNOOZE = 'ledger-backup-snooze', DAY = 864e5;
 
 function makeClient(key) {
   return supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
@@ -477,7 +478,7 @@ const home = { open: null, edit: null, all: new Set(), others: {} };   // open/e
 const PEEK = 3, MAX_BLOCKS = 6;
 
 function renderHome() {
-  renderSettleNotice(); renderPlanNotice();
+  renderSettleNotice(); renderPlanNotice(); renderBackupNotice();
   const m = $('month').value, pm = shiftMonth(m, -1), y = m.slice(0, 4);
   const cur = state.items.filter(i => i.date.startsWith(m));
   const prev = state.items.filter(i => i.date.startsWith(pm));
@@ -712,19 +713,37 @@ function renderLedger() {
       ${bar(v / maxU * 100).replace(/bar (ok|over)/, 'bar warn')}<span class="num">${won(v)}</span></div>`).join('')
     : '<div class="empty">지출 내역이 없습니다</div>';
 
-  // 목록
-  const rows = base.filter(i => t === '' || i.type === t)
+  // 목록 (검색어가 있으면 모든 달에서 찾음)
+  const q = $('fQuery').value.trim().toLowerCase(), searching = q !== '';
+  const src = searching ? state.items.filter(i => (u === '' || String(i.user) === u) && matchItem(i, q)) : base;
+  const rows = src.filter(i => t === '' || i.type === t)
     .sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '') || b.id - a.id);
+  $('listTitle').textContent = searching ? '검색 결과' : '내역';
+  $('searchInfo').hidden = !searching;
+  if (searching) {
+    const tot = k => sum(rows.filter(i => i.type === k).map(i => i.amount));
+    const parts = [['expense', '지출'], ['income', '수입'], ['transfer', '이체']].filter(([k]) => rows.some(i => i.type === k))
+      .map(([k, l]) => `${l} <b>${won(tot(k))}</b>`);
+    $('searchInfo').innerHTML = `‘${esc($('fQuery').value.trim())}’ 모든 달에서 <b>${rows.length}건</b>${parts.length ? ' · ' + parts.join(' · ') : ''}`;
+  }
   $('list').innerHTML = rows.length ? rows.map(i => {
     const refund = i.type === 'expense' && i.amount < 0;
+    const d = searching && !i.date.startsWith(m.slice(0, 4)) ? i.date.slice(2).replace(/-/g, '.') : i.date.slice(5).replace('-', '.');
     return `<tr data-id="${i.id}">
-      <td class="d">${i.date.slice(5).replace('-', '.')}${i.time ? `<small>${i.time}</small>` : ''}</td>
+      <td class="d">${d}${i.time ? `<small>${i.time}</small>` : ''}</td>
       <td class="t"><b>${catLabel(i.category)}</b><span class="memo">${esc(i.memo)}</span>
         <small>${userBadge(i.user)} · ${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${refund ? ' · <span class="chip">취소/환불</span>' : ''}${srcTag(i) ? ' · ' + srcTag(i) : ''}</small></td>
       <td class="num amt ${refund ? 'refund' : i.type}">${fmt(i.amount)}</td>
       <td class="act"><button data-act="edit" title="수정">✎</button><button data-act="del" title="삭제">✕</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="4" class="empty">이 달의 내역이 없습니다</td></tr>';
+  }).join('') : `<tr><td colspan="4" class="empty">${searching ? '찾는 내역이 없어요' : '이 달의 내역이 없습니다'}</td></tr>`;
+}
+// 검색: 내용·분류·결제수단·사용자 이름, 숫자만 넣으면 금액도 (쉼표·원 무시)
+function matchItem(i, q) {
+  const text = [i.memo, i.category, i.method, state.users[i.user], TYPES[i.type]].join(' ').toLowerCase();
+  if (text.includes(q)) return true;
+  const n = q.replace(/[,원\s]/g, '');
+  return /^\d+$/.test(n) && String(Math.abs(i.amount)).includes(n);
 }
 const srcTag = i => i.source === 'auto' || i.recurring_id ? '<span class="chip solid">자동</span>'
   : i.source === 'sms' ? '<span class="chip">문자</span>' : '';
@@ -759,6 +778,8 @@ async function deleteItem(it) {
 
 $('fUser').addEventListener('change', renderLedger);
 $('fType').addEventListener('change', renderLedger);
+let queryTimer;
+$('fQuery').addEventListener('input', () => { clearTimeout(queryTimer); queryTimer = setTimeout(renderLedger, 150); });
 
 /* 입력/수정 폼 */
 let editingId = null;
@@ -1653,7 +1674,7 @@ function renderSettings() {
     `<div class="un"><div class="un-head">${userBadge(i)}<button type="button" class="av-pick" data-av="${i}">${state.avatars[i] ? '바꾸기' : '캐릭터'}</button></div>
       <input data-u="${i}" value="${esc(n)}" maxlength="12" aria-label="${i + 1}번 사용자 이름" style="width:100%;margin-top:6px"></div>`).join('');
   $('importLocal').hidden = !localOldData();
-  renderAlias(); loadAlias();
+  renderAlias(); loadAlias(); renderBackupInfo();
 }
 $('keyToggle').onclick = () => { keyShown = !keyShown; renderSettings(); };
 $('copyInvite').onclick = () => copyText(inviteLink(), '초대 링크를 복사했습니다');
@@ -1691,7 +1712,28 @@ function download(name, content, type) {
 $('exportJson').onclick = () => {
   const { items, budgets, annualBudgets, users, avatars, profile, rules, recurring } = state;
   download(`가계부_백업_${todayISO()}.json`, JSON.stringify({ version: 3, items: items.map(({ id, ...i }) => i), budgets, annualBudgets, users, avatars, profile, rules, recurring }, null, 2), 'application/json');
+  lsSet(BACKUP_AT, String(Date.now())); lsSet(BACKUP_SNOOZE, null);
+  renderBackupInfo(); renderBackupNotice();
+  toast('백업 파일을 저장했어요 (다운로드 폴더)');
 };
+// 백업 알림: 이 기기에서 30일 넘게 백업하지 않았고 내역이 30건 이상이면 홈에 안내
+function backupDays() { const t = +lsGet(BACKUP_AT); return t ? Math.floor((Date.now() - t) / DAY) : null; }
+function renderBackupNotice() {
+  const d = backupDays(), snooze = +lsGet(BACKUP_SNOOZE) || 0;
+  const show = state.items.length >= 30 && (d == null || d >= 30) && Date.now() > snooze;
+  $('backupNotice').hidden = !show;
+  if (show) $('backupNoticeTitle').textContent = d == null ? '아직 백업한 적이 없어요' : `백업한 지 ${d}일 지났어요`;
+}
+function renderBackupInfo() {
+  const d = backupDays(), t = +lsGet(BACKUP_AT);
+  $('backupInfo').innerHTML = d == null ? '이 기기에서는 아직 백업한 적이 없어요.'
+    : `이 기기의 마지막 백업: <b>${todayISO(new Date(t))}</b> (${d === 0 ? '오늘' : d + '일 전'})`;
+}
+$('backupNotice').addEventListener('click', e => {
+  const act = e.target.closest('button')?.dataset.act;
+  if (act === 'backup-now') $('exportJson').click();
+  else if (act === 'backup-later') { lsSet(BACKUP_SNOOZE, String(Date.now() + 7 * DAY)); renderBackupNotice(); toast('더보기 → 설정 → 백업에서 언제든 할 수 있어요'); }
+});
 $('importJson').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file) return;
@@ -1708,7 +1750,8 @@ $('importLocal').onclick = async () => {
   refreshUserSelects(); renderAll();
 };
 $('exportCsv').onclick = () => {
-  const qs = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
+  // = + - @ 로 시작하면 엑셀이 수식으로 실행하므로 앞에 ' 를 붙여 글자로 둠
+  const qs = s => { let v = String(s ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return `"${v.replace(/"/g, '""')}"`; };
   const lines = state.items.slice().sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
     .map(i => [i.date, i.time, TYPES[i.type], qs(i.category), qs(state.users[i.user]), qs(i.method), qs(i.memo), i.amount].join(','));
   download('가계부.csv', '\uFEFF' + ['날짜,시간,구분,분류,사용자,결제수단,내용,금액', ...lines].join('\n'), 'text/csv;charset=utf-8');

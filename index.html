@@ -104,6 +104,10 @@
         <div><b>우리 가족 조건을 넣어 보세요</b><small>가족 구성, 집, 차, 수입을 넣으면 분류별 예산을 추천해 드려요. 나중에 언제든 바꿀 수 있어요.</small></div>
         <span class="filters"><button type="button" class="btn sm ghost" data-act="plan-later">나중에</button><button type="button" class="btn sm primary" data-act="plan-go">시작하기</button></span>
       </div>
+      <div class="notice" id="backupNotice" hidden>
+        <div><b id="backupNoticeTitle">백업한 지 오래됐어요</b><small>가계부 전체를 파일 하나로 이 기기에 저장해 둬요. 서버에 문제가 생겨도 이 파일로 되살릴 수 있어요.</small></div>
+        <span class="filters"><button type="button" class="btn sm ghost" data-act="backup-later">일주일 뒤에</button><button type="button" class="btn sm primary" data-act="backup-now">지금 백업</button></span>
+      </div>
       <div class="notice" id="settleNotice" hidden></div>
       <div class="metrics">
         <div class="metric"><div class="label" id="hmIncLabel">수입</div><div class="value" id="hmIncome">0</div></div>
@@ -156,8 +160,9 @@
 
       <div class="card">
         <div class="card-head">
-          <h2>내역</h2>
+          <h2 id="listTitle">내역</h2>
           <div class="filters">
+            <input type="search" id="fQuery" placeholder="🔍 내용·금액 검색 (모든 달)" maxlength="40" aria-label="내역 검색">
             <select id="fUser"></select>
             <select id="fType">
               <option value="">전체</option>
@@ -167,6 +172,7 @@
             </select>
           </div>
         </div>
+        <div class="search-info" id="searchInfo" hidden></div>
         <div class="table-wrap">
           <table class="list">
             <tbody id="list"></tbody>
@@ -446,7 +452,8 @@
           <button type="button" class="btn" id="importLocal" hidden>이 브라우저의 예전 데이터 가져오기</button>
           <button type="button" class="btn" id="exportCsv">CSV 내보내기</button>
         </div>
-        <p class="hint">백업 불러오기는 현재 가계부 내용을 백업 파일 내용으로 <b>바꿉니다</b>.</p>
+        <p class="hint" id="backupInfo"></p>
+        <p class="hint">백업 불러오기는 현재 가계부 내용을 백업 파일 내용으로 <b>바꿉니다</b>. 한 달에 한 번 백업해 두면 안심이에요.</p>
       </div>
       <div class="card">
         <div class="card-head"><h2>위험 구역</h2></div>
@@ -554,7 +561,8 @@
       <li><b>홈</b>: 이번 달 분류별 합계. 큰 금액은 <b>만원 단위</b>(예: 160만원)로 짧게 보여요. 블록을 누르면 정확한 금액과 누가·어떻게 썼는지가 펼쳐지고, ✎로 고치고 🗑로 지웁니다.</li>
       <li>더보기 → 설정 → 사용자 이름에서 <b>캐릭터</b>를 눌러 나를 나타낼 이모지를 고를 수 있어요.</li>
       <li>잘못 지웠다면 아래에 잠깐 뜨는 <b>되돌리기</b>를 누르세요.</li>
-      <li><b>내역</b>: 전체 목록. 사람별, 수입/지출별로 골라 볼 수 있어요.</li>
+      <li><b>내역</b>: 전체 목록. 사람별, 수입/지출별로 골라 볼 수 있어요. <b>🔍 검색</b> 칸에 사용처·분류·금액(예: 스타벅스, 45000)을 넣으면 모든 달에서 찾아 합계까지 보여줘요.</li>
+      <li>더보기 → 설정 → <b>백업</b>: 가계부 전체를 파일로 저장해요. 30일 넘게 백업하지 않으면 홈에 알림이 떠요.</li>
       <li><b>더보기 → 개인별 통계</b>: 사람을 고르면 그 사람의 이번 달 수입·지출, 분류별 지출, 최근 6개월, 많이 쓴 곳, 가족 비교를 봅니다.</li>
       <li>위쪽 <b>‹ 11월 ›</b>으로 다른 달을 봅니다.</li>
     </ul>
