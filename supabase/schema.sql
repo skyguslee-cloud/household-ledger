@@ -222,3 +222,9 @@ grant execute on function public.ledger_alias_login(text, text), public.ledger_a
 alter table public.ledger_spaces
   add column avatars jsonb not null default '[]'::jsonb
   check (jsonb_typeof(avatars) = 'array' and jsonb_array_length(avatars) <= 5 and length(avatars::text) <= 200);
+
+-- ===== 우리 가족 조건 (예산 추천용) =====
+-- 어른·아이 수, 사는 곳, 집, 차, 수입, 저축 목표 등. 앱의 '우리 가족 조건' 화면에서 고침
+alter table public.ledger_spaces
+  add column profile jsonb not null default '{}'::jsonb
+  check (jsonb_typeof(profile) = 'object' and length(profile::text) <= 2000);

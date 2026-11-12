@@ -81,13 +81,14 @@
       <button data-tab="home" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>홈</button>
       <button data-tab="ledger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>내역</button>
       <button class="fab" id="fab" aria-label="내역 추가"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button data-tab="budget" data-group="settle"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></svg>예산</button>
+      <button data-tab="budget" data-group="settle plan"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></svg>예산</button>
       <button data-tab="more" data-group="stats sms fixed settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>더보기</button>
     </nav>
 
     <!-- ===== 더보기 ===== -->
     <section id="tab-more" hidden>
       <div class="card menu">
+        <button data-tab="plan"><b>우리 가족 조건 · 예산 추천</b><small>가족 구성, 집, 차, 수입을 넣으면 예산을 추천</small><span>›</span></button>
         <button data-tab="stats"><b>개인별 통계</b><small>사람마다 이번 달·올해 수입, 지출, 많이 쓴 곳</small><span>›</span></button>
         <button data-tab="sms"><b>문자로 넣기</b><small>카드·은행 문자를 붙여넣어 한 번에 기록</small><span>›</span></button>
         <button data-tab="fixed"><b>고정 수입·지출</b><small>월급, 관리비처럼 매달 자동 기록</small><span>›</span></button>
@@ -99,6 +100,10 @@
 
     <!-- ===== 홈: 분류별 블록 ===== -->
     <section id="tab-home">
+      <div class="notice" id="planNotice" hidden>
+        <div><b>우리 가족 조건을 넣어 보세요</b><small>가족 구성, 집, 차, 수입을 넣으면 분류별 예산을 추천해 드려요. 나중에 언제든 바꿀 수 있어요.</small></div>
+        <span class="filters"><button type="button" class="btn sm ghost" data-act="plan-later">나중에</button><button type="button" class="btn sm primary" data-act="plan-go">시작하기</button></span>
+      </div>
       <div class="notice" id="settleNotice" hidden></div>
       <div class="metrics">
         <div class="metric"><div class="label" id="hmIncLabel">수입</div><div class="value" id="hmIncome">0</div></div>
@@ -202,6 +207,75 @@
       </div>
     </section>
 
+    <!-- ===== 우리 가족 조건 · 예산 추천 ===== -->
+    <section id="tab-plan" hidden>
+      <button class="back" data-tab="budget">‹ 예산</button>
+      <div class="card">
+        <div class="card-head"><h2>우리 가족 조건</h2><span class="chip" id="planState"></span></div>
+        <p class="hint top">조건을 고르면 아래 추천 예산이 바로 바뀌어요. 저장해 두면 가족 모두 같은 조건을 보고, 언제든 다시 고칠 수 있어요.</p>
+        <form id="planForm" class="plan-form" autocomplete="off">
+          <fieldset>
+            <legend>가족 구성 <small>(명)</small></legend>
+            <div class="plan-grid">
+              <label>어른<input type="number" name="adults" min="1" max="6" inputmode="numeric"></label>
+              <label><span>영유아 <small>0~7세</small></span><input type="number" name="infant" min="0" max="6" inputmode="numeric"></label>
+              <label>초등학생<input type="number" name="elem" min="0" max="6" inputmode="numeric"></label>
+              <label>중학생<input type="number" name="middle" min="0" max="6" inputmode="numeric"></label>
+              <label>고등학생<input type="number" name="high" min="0" max="6" inputmode="numeric"></label>
+              <label>대학생<input type="number" name="univ" min="0" max="6" inputmode="numeric"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>사는 곳 · 집 · 차</legend>
+            <div class="plan-grid">
+              <label>사는 곳<select name="region"></select></label>
+              <label>집<select name="home"></select></label>
+              <label><span>월 주거비 <small>관리비·월세·대출이자</small></span><input type="number" name="housing" min="0" step="10000" inputmode="numeric"></label>
+              <label>자동차<select name="cars"><option value="0">없음</option><option value="1">1대</option><option value="2">2대</option></select></label>
+              <label>반려동물<select name="pets"><option value="0">없음</option><option value="1">1마리</option><option value="2">2마리</option></select></label>
+              <label>사교육<select name="tutoring"></select></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>수입 · 저축 <small>(한 달, 원)</small></legend>
+            <div class="plan-grid">
+              <label>가족 실수령 합계<input type="number" name="income" min="0" step="10000" inputmode="numeric"></label>
+              <label>매달 저축 목표<input type="number" name="goal" min="0" step="10000" inputmode="numeric"></label>
+              <label>부모님 용돈<input type="number" name="parents" min="0" step="10000" inputmode="numeric"></label>
+            </div>
+            <p class="hint" id="planIncomeHint"></p>
+          </fieldset>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>추천 예산</h2>
+          <div class="filters">
+            <button type="button" class="btn sm" id="planFit">저축 목표에 맞추기</button>
+            <button type="button" class="btn sm ghost" id="planReset">추천값으로 되돌리기</button>
+          </div>
+        </div>
+        <div class="summary" id="planSummary"></div>
+        <p class="hint" id="planHint"></p>
+        <div class="table-wrap">
+          <table class="budget plan">
+            <thead><tr><th>분류</th><th class="num why">추천 근거</th><th class="num">지금 예산</th><th class="num">새 예산</th></tr></thead>
+            <tbody id="planBody"></tbody>
+            <tfoot id="planFoot"></tfoot>
+          </table>
+        </div>
+        <div class="toolbar end">
+          <label class="inline">적용 시작 <input type="month" id="planFrom"></label>
+          <span class="spacer"></span>
+          <button type="button" class="btn" id="planSaveProfile">조건만 저장</button>
+          <button type="button" class="btn primary" id="planSave">이 예산으로 저장</button>
+        </div>
+        <p class="hint">추천 금액은 이 앱의 <b>기본 추정치</b>예요(공식 통계가 아니에요). 어른·아이 수와 학년, 사는 곳, 집·차를 보고 계산하고, 만원 단위로 맞춰요. 칸을 눌러 직접 고칠 수 있고, 고친 칸은 조건을 바꿔도 그대로 둬요.
+          저장하면 <b>적용 시작 달</b>의 월간 예산과 <b>그해</b> 연간 예산이 이 금액으로 바뀌고, 다음 달부터는 자동으로 이어져요.</p>
+      </div>
+    </section>
+
     <!-- ===== 개인별 통계 ===== -->
     <section id="tab-stats" hidden>
       <button class="back" data-tab="more">‹ 더보기</button>
@@ -271,6 +345,7 @@
           <h2 id="budgetTitle">월간 예산</h2>
           <div class="filters">
             <button type="button" class="btn sm primary" data-tab="settle">월말 결산</button>
+            <button type="button" class="btn sm" data-tab="plan">가족 조건으로 추천</button>
             <button type="button" class="btn sm" id="copyPrev">지난 예산 불러오기</button>
             <button type="button" class="btn sm ghost" id="clearBudget">비우기</button>
           </div>
@@ -487,6 +562,7 @@
     <ul>
       <li><b>예산</b> 탭에서 분류별 한 달 예산을 적습니다. <b>새 달이 되면 지난달 예산이 자동으로 이어집니다.</b> 바꾸고 싶은 칸만 고치면 그 달에만 적용돼요.</li>
       <li>여행, 경조사·명절, 미용, 옷, 자동차보험·세금, 재산세, 가전·가구는 <b>1년 예산</b>으로 따로 관리합니다.</li>
+      <li><b>가족 조건으로 추천</b>: 예산 탭(또는 더보기 → 우리 가족 조건)에서 어른·아이 수와 학년, 사는 곳, 집, 차, 수입, 저축 목표를 넣으면 분류별 예산을 추천해 줘요. 칸을 고쳐서 저장하면 되고, 조건은 나중에 언제든 바꿀 수 있어요.</li>
       <li>막대가 회색 → 검정(80% 넘음) → 빗금(초과)으로 바뀝니다.</li>
       <li><b>월말 결산</b>: 매달 25일부터 홈 화면에 알림이 뜹니다. 이번 달 쓴 돈을 확인하고, 최근 3개월 지출을 보고 추천한 금액으로 <b>다음 달 예산</b>을 정해 저장하세요. 예산 탭의 <b>월말 결산</b> 버튼으로 언제든 열 수 있어요.</li>
     </ul>

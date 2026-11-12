@@ -137,7 +137,7 @@ function friendlyError(e) {
 }
 
 /* ---------- 상태 ---------- */
-const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], avatars: ['', '', '', '', ''], rules: {}, recurring: [], budgetCarried: null });
+const emptyState = () => ({ items: [], budgets: {}, annualBudgets: {}, users: [...DEFAULT_USERS], avatars: ['', '', '', '', ''], profile: {}, rules: {}, recurring: [], budgetCarried: null });
 let state = emptyState();
 
 /* =========================================================
@@ -192,6 +192,7 @@ async function loadAll() {
   if (Array.isArray(spaces[0].users) && spaces[0].users.length === 5) s.users = spaces[0].users;
   s.rules = spaces[0].rules || {};
   if (Array.isArray(spaces[0].avatars)) s.avatars = [0, 1, 2, 3, 4].map(i => String(spaces[0].avatars[i] || ''));
+  if (spaces[0].profile && typeof spaces[0].profile === 'object') s.profile = spaces[0].profile;
   s.budgetCarried = spaces[0].budget_carried || null;
   s.items = entries.map(fromRow);
   budgets.forEach(b => { const t = b.kind === 'month' ? s.budgets : s.annualBudgets; (t[b.period] ||= {})[b.category] = Number(b.amount); });
@@ -223,7 +224,7 @@ async function deleteEntry(id) {
   state.items = state.items.filter(i => i.id !== id);
 }
 async function saveSpace() {
-  await q(sb.from('ledger_spaces').update({ users: state.users, avatars: state.avatars, rules: state.rules }).eq('space_id', ledgerKey));
+  await q(sb.from('ledger_spaces').update({ users: state.users, avatars: state.avatars, profile: state.profile, rules: state.rules }).eq('space_id', ledgerKey));
 }
 let ruleTimer;
 function learnRule(memo, cat) {
@@ -364,6 +365,7 @@ async function importData(s) {
   state = emptyState();
   if (Array.isArray(s.users) && s.users.length === 5) state.users = s.users.map(String);
   if (Array.isArray(s.avatars)) state.avatars = [0, 1, 2, 3, 4].map(i => String(s.avatars[i] || ''));
+  if (s.profile && typeof s.profile === 'object') state.profile = s.profile;
   state.rules = Object.fromEntries(Object.entries(s.rules || {}).map(([k, v]) => [k, RENAMED[v] || v]));
   await saveSpace();
   for (const r of s.recurring || [])
@@ -445,6 +447,7 @@ function refreshMethods() {
 /* ---------- 탭 / 월 ---------- */
 let currentTab = 'home';
 function switchTab(t) {
+  if (t === 'plan' && currentTab !== 'plan') planDraft = null;   // 들어올 때마다 저장된 조건으로 새로 시작
   currentTab = t;
   document.querySelectorAll('.bottombar [data-tab]').forEach(b =>
     b.classList.toggle('on', b.dataset.tab === t || (b.dataset.group || '').split(' ').includes(t)));
@@ -466,7 +469,7 @@ $('month').addEventListener('change', () => { if ($('month').value) renderAll();
 
 function renderAll() {
   refreshMethods();
-  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, settle: renderSettle, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
+  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, settle: renderSettle, plan: renderPlan, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
 }
 
 /* ---------- 홈: 분류별 블록 ---------- */
@@ -474,7 +477,7 @@ const home = { open: null, edit: null, all: new Set(), others: {} };   // open/e
 const PEEK = 3, MAX_BLOCKS = 6;
 
 function renderHome() {
-  renderSettleNotice();
+  renderSettleNotice(); renderPlanNotice();
   const m = $('month').value, pm = shiftMonth(m, -1), y = m.slice(0, 4);
   const cur = state.items.filter(i => i.date.startsWith(m));
   const prev = state.items.filter(i => i.date.startsWith(pm));
@@ -1115,6 +1118,217 @@ $('stlSave').onclick = async () => {
   renderSettle();
 };
 
+/* ---------- 우리 가족 조건 · 예산 추천 ----------
+   공식 통계가 아닌 앱 기본 추정치. 2인 어른 + 고등학생 2명(수도권, 차 1대) 기준으로
+   사람 수·학년·지역·집·차에 따라 늘리고 줄임. */
+const PLAN_REGION = { seoul: ['서울', 1.1], metro: ['수도권(경기·인천)', 1.05], city: ['광역시', 1.0], other: ['그 외 지역', 0.95] };
+const PLAN_HOME = { own: '자가', jeonse: '전세', rent: '월세' };
+const PLAN_TUTOR = { low: ['적게', 0.6], normal: ['보통', 1], high: ['많이', 1.5] };
+const PLAN_KIDS = [['infant', '영유아'], ['elem', '초등'], ['middle', '중등'], ['high', '고등'], ['univ', '대학']];
+const PLAN_DISMISS = 'ledger-plan-dismiss';
+const PLAN_FLEX = ['카페/간식', '쇼핑', '문화/여가', '편의점/마트/잡화', '생활', '미분류', '여행/숙박', '의류쇼핑', '미용', '가전/가구', '경조/선물'];
+const hasProfile = () => !!state.profile?.updated;
+
+function recurringIncome(m) {
+  return sum(state.recurring.filter(r => r.type === 'income' && (!r.end_month || r.end_month >= m)).map(r => recAmount(r, m) || 0));
+}
+function planProfile() {
+  const p = state.profile || {}, inc = recurringIncome(thisMonth());
+  const num = (v, d) => Number.isFinite(+v) && v !== '' && v != null ? Math.max(0, Math.round(+v)) : d;
+  const income = num(p.income, inc);
+  return {
+    adults: Math.max(1, num(p.adults, 2)), infant: num(p.infant, 0), elem: num(p.elem, 0), middle: num(p.middle, 0), high: num(p.high, 0), univ: num(p.univ, 0),
+    region: PLAN_REGION[p.region] ? p.region : 'metro', home: PLAN_HOME[p.home] ? p.home : 'own', housing: num(p.housing, 300000),
+    cars: Math.min(2, num(p.cars, 1)), pets: Math.min(2, num(p.pets, 0)), tutoring: PLAN_TUTOR[p.tutoring] ? p.tutoring : 'normal',
+    parents: num(p.parents, 0), income, goal: num(p.goal, Math.round(income * 0.2 / 10000) * 10000)
+  };
+}
+// 조건 → 분류별 추천 { 분류: { amt, why } } (월간·연간)
+function planSuggest(p) {
+  const r1 = v => Math.round(v / 10000) * 10000, r10 = v => Math.round(v / 100000) * 100000;
+  const kids = p.infant + p.elem + p.middle + p.high + p.univ, N = p.adults + kids;
+  const rf = PLAN_REGION[p.region][1], tf = PLAN_TUTOR[p.tutoring][1];
+  const W = p.adults + p.univ + p.high * 1.1 + p.middle + p.elem * 0.7 + p.infant * 0.5;   // 먹는 양 가중치
+  const big = p.adults + p.univ + p.high + p.middle, phones = N - p.infant;
+  const fam = [`어른 ${p.adults}`, ...PLAN_KIDS.filter(([k]) => p[k]).map(([k, l]) => `${l} ${p[k]}`)].join('·');
+  const region = PLAN_REGION[p.region][0];
+  const M = {}, Y = {};
+  const put = (o, c, amt, why) => { if (amt > 0) o[c] = { amt, why }; };
+  put(M, '식비', r1(240000 * W * rf), `${fam}, ${region}`);
+  put(M, '카페/간식', r1(30000 * phones * rf), `${phones}명 × 3만`);
+  put(M, '편의점/마트/잡화', r1((50000 + 25000 * N) * rf), `${N}명 생활용품`);
+  put(M, '쇼핑', r1(37500 * N), `${N}명`);
+  put(M, '생활', r1(50000 + 12500 * N), '세탁·수리 등');
+  put(M, '주거/통신', r1(p.housing + 45000 * phones), `주거비 ${man(p.housing)} + 휴대폰 ${phones}대`);
+  put(M, '교통/자동차', r1(220000 * p.cars + 50000 * big), `${p.cars ? `차 ${p.cars}대 + ` : ''}대중교통 ${big}명`);
+  put(M, '의료/건강', r1(60000 * N), `${N}명 × 6만`);
+  put(M, '문화/여가', r1(150000 + 25000 * N), `${N}명`);
+  const edu = (300000 * p.infant + 500000 * p.elem + 700000 * p.middle + 800000 * p.high) * tf + 600000 * p.univ;
+  put(M, '교육', r1(edu), kids ? `${PLAN_KIDS.filter(([k]) => p[k]).map(([k, l]) => `${l} ${p[k]}`).join('·')}, 사교육 ${PLAN_TUTOR[p.tutoring][0]}` : '');
+  put(M, '자녀/육아', r1(300000 * p.infant + 100000 * p.elem + 50000 * (p.middle + p.high + p.univ)), '학용품·간식 등');
+  const kidMoney = 30000 * p.elem + 70000 * p.middle + 100000 * p.high + 400000 * p.univ;
+  put(M, '용돈', r1(p.parents + kidMoney), [p.parents ? `부모님 ${man(p.parents)}` : '', kidMoney ? `아이들 ${man(kidMoney)}` : ''].filter(Boolean).join(' + '));
+  put(M, '반려동물', 150000 * p.pets, `${p.pets}마리`);
+  put(M, '보험/세금/금융', r1(150000 * p.adults + 75000 * kids), `어른 ${p.adults} · 아이 ${kids}`);
+  put(M, '기부/후원', 50000, '');
+  const sub = sum(Object.values(M).map(x => x.amt));
+  put(M, '미분류', Math.max(100000, r1(sub * 0.05)), '예비비 (월 예산의 5%)');
+  put(Y, '여행/숙박', r10(900000 * N), `${N}명 × 90만`);
+  put(Y, '경조/선물', r10(1500000 + 500000 * N), '명절·경조사 포함');
+  put(Y, '미용', r10(300000 * big + 150000 * (p.elem + p.infant)), `${N}명`);
+  put(Y, '의류쇼핑', r10(600000 * big + 400000 * (p.elem + p.infant)), `${N}명`);
+  put(Y, '자동차보험/세금', 1400000 * p.cars, p.cars ? `차 ${p.cars}대` : '');
+  put(Y, '재산세', p.home === 'own' ? 1000000 : 0, '자가 (집값에 따라 고치세요)');
+  put(Y, '가전/가구', r10(1000000 + 125000 * N), '교체·수리');
+  return { M, Y };
+}
+
+let planDraft = null;   // { p, values: { 'M:식비': 1000000, ... }, touched: Set }
+const planKey = (kind, c) => `${kind}:${c}`;
+function planRecValues(p) {
+  const { M, Y } = planSuggest(p), v = {};
+  MONTHLY_CATS.forEach(c => v[planKey('M', c)] = M[c]?.amt || 0);
+  ANNUAL_CATS.forEach(c => v[planKey('Y', c)] = Y[c]?.amt || 0);
+  return v;
+}
+function planInit(force) {
+  if (planDraft && !force) return;
+  const p = planProfile();
+  planDraft = { p, values: planRecValues(p), touched: new Set() };
+  const f = $('planForm');
+  f.region.innerHTML = Object.entries(PLAN_REGION).map(([k, [l]]) => `<option value="${k}">${l}</option>`).join('');
+  f.home.innerHTML = Object.entries(PLAN_HOME).map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  f.tutoring.innerHTML = Object.entries(PLAN_TUTOR).map(([k, [l]]) => `<option value="${k}">${l}</option>`).join('');
+  for (const [k, v] of Object.entries(p)) if (f[k]) f[k].value = v;
+  $('planFrom').value = thisMonth();
+}
+function planReadForm() {
+  const f = $('planForm'), p = {};
+  for (const k of Object.keys(planDraft.p)) {
+    const el = f[k]; if (!el) continue;
+    p[k] = el.tagName === 'SELECT' && isNaN(+el.value) ? el.value : Math.max(0, Math.round(+el.value || 0));
+  }
+  p.adults = Math.max(1, p.adults);
+  return p;
+}
+function renderPlan() {
+  planInit();
+  const p = planDraft.p, { M, Y } = planSuggest(p), v = planDraft.values;
+  const m = $('planFrom').value || thisMonth(), y = m.slice(0, 4);
+  const curM = state.budgets[m] || {}, curY = state.annualBudgets[y] || {};
+  $('planState').textContent = hasProfile() ? `저장됨 · ${state.profile.updated}` : '아직 저장 전';
+  $('planState').className = hasProfile() ? 'chip solid' : 'chip';
+  const inc = recurringIncome(thisMonth());
+  $('planIncomeHint').textContent = inc ? `고정 수입에 등록된 이번 달 수입은 ${won(inc)}이에요.` : '';
+  const row = (kind, c, rec) => {
+    const k = planKey(kind, c), val = v[k] || 0, now = (kind === 'M' ? curM : curY)[c] || 0;
+    if (!val && !rec?.amt && !now) return '';
+    return `<tr><td>${catLabel(c)}${planDraft.touched.has(k) ? ' <span class="chip">고침</span>' : ''}</td>
+      <td class="num why"><small>${esc(rec?.why || '')}</small>${rec?.amt ? `<small>추천 ${man(rec.amt)}</small>` : ''}</td>
+      <td class="num">${now ? fmt(now) : '<small>—</small>'}</td>
+      <td class="num"><input type="number" min="0" step="${kind === 'M' ? 10000 : 100000}" data-plan="${esc(k)}" value="${val || ''}" placeholder="—">
+        <small class="mob">${esc(rec?.why || '')}</small></td></tr>`;
+  };
+  $('planBody').innerHTML =
+    `<tr class="grp"><td colspan="4">월간 예산 <small>${monthLabel(m)}부터</small></td></tr>` + MONTHLY_CATS.map(c => row('M', c, M[c])).join('') +
+    `<tr class="grp"><td colspan="4">연간 예산 <small>${y}년</small></td></tr>` + ANNUAL_CATS.map(c => row('Y', c, Y[c])).join('');
+  renderPlanTotals();
+}
+function planTotals() {
+  const v = planDraft.values;
+  const mt = sum(MONTHLY_CATS.map(c => v[planKey('M', c)] || 0)), yt = sum(ANNUAL_CATS.map(c => v[planKey('Y', c)] || 0));
+  const spend = mt + Math.round(yt / 12), save = planDraft.p.income - spend;
+  return { mt, yt, spend, save, gap: save - planDraft.p.goal };
+}
+function renderPlanTotals() {
+  const p = planDraft.p, t = planTotals();
+  const box = (label, val, cls = '') => `<div><div class="label">${label}</div><div class="value ${cls}">${val}</div></div>`;
+  $('planSummary').innerHTML = box('한 달 수입', man(p.income)) + box('한 달 지출 예상', man(t.spend)) +
+    box('저축 가능', p.income ? man(t.save) : '0', p.income && t.save < 0 ? 'over-text' : '') + box('저축 목표', man(p.goal));
+  $('planHint').innerHTML = !p.income ? '수입을 넣으면 저축 가능한 금액을 계산해 드려요.'
+    : `월간 예산 ${won(t.mt)} + 연간 예산 ${won(t.yt)}의 1/12(${won(Math.round(t.yt / 12))})을 한 달 지출로 봤어요. ` +
+      (!p.goal ? '' : t.gap >= 0 ? `저축 목표보다 <b>${won(t.gap)}</b> 여유가 있어요.`
+        : `저축 목표까지 <b class="over-text">${won(-t.gap)}</b> 모자라요. <b>저축 목표에 맞추기</b>를 누르면 줄이기 쉬운 분류부터 줄여 볼게요.`);
+  $('planFoot').innerHTML = `<tr><td><b>월간 합계</b></td><td class="why"></td><td></td><td class="num"><b>${won(t.mt)}</b></td></tr>
+    <tr><td><b>연간 합계</b></td><td class="why"></td><td></td><td class="num"><b>${won(t.yt)}</b><small>한 달에 ${won(Math.round(t.yt / 12))}</small></td></tr>`;
+}
+$('planForm').addEventListener('input', () => {
+  const old = planDraft.p, p = planReadForm(), rec = planRecValues(p);
+  // 수입을 바꾸면, 직접 정하지 않은 저축 목표는 수입의 20%로 따라감
+  if (p.income !== old.income && p.goal === Math.round(old.income * 0.2 / 10000) * 10000) {
+    p.goal = Math.round(p.income * 0.2 / 10000) * 10000; $('planForm').goal.value = p.goal;
+  }
+  planDraft.p = p;
+  for (const k of Object.keys(rec)) if (!planDraft.touched.has(k)) planDraft.values[k] = rec[k];
+  renderPlan();
+});
+$('planFrom').addEventListener('change', renderPlan);
+$('planBody').addEventListener('input', e => {
+  const k = e.target.dataset.plan; if (!k) return;
+  planDraft.values[k] = Math.max(0, Math.round(+e.target.value || 0));
+  planDraft.touched.add(k);
+  renderPlanTotals();
+});
+$('planReset').onclick = () => {
+  planDraft.values = planRecValues(planDraft.p); planDraft.touched.clear();
+  renderPlan(); toast('추천 금액으로 되돌렸어요');
+};
+$('planFit').onclick = () => {
+  const p = planDraft.p, t = planTotals();
+  if (!p.income || !p.goal) return toast('수입과 저축 목표를 먼저 넣어 주세요');
+  if (t.gap >= 0) return toast('이미 저축 목표를 맞출 수 있어요');
+  const v = planDraft.values, keys = PLAN_FLEX.map(c => planKey(ANNUAL_CATS.includes(c) ? 'Y' : 'M', c));
+  const monthly = k => k.startsWith('Y:') ? (v[k] || 0) / 12 : (v[k] || 0);
+  const flex = sum(keys.map(monthly)), need = -t.gap;
+  const f = Math.max(0.5, 1 - need / Math.max(1, flex));   // 최대 절반까지만 줄임
+  keys.forEach(k => {
+    if (!v[k]) return;
+    const unit = k.startsWith('Y:') ? 100000 : 10000;
+    v[k] = Math.floor(v[k] * f / unit) * unit; planDraft.touched.add(k);
+  });
+  renderPlan();
+  const after = planTotals();
+  toast(after.gap >= 0 ? '줄이기 쉬운 분류를 줄여서 저축 목표에 맞췄어요. 저장해야 적용돼요'
+    : `절반까지 줄여도 ${won(-after.gap)} 모자라요. 다른 분류나 목표를 조정해 주세요`);
+};
+async function savePlanProfile() {
+  const before = state.profile;
+  state.profile = { ...planDraft.p, updated: todayISO() };
+  try { await run('가족 조건 저장', saveSpace); } catch (e) { state.profile = before; throw e; }
+}
+$('planSaveProfile').onclick = async () => {
+  try { await savePlanProfile(); toast('가족 조건을 저장했어요'); } catch {}
+  renderPlan();
+};
+$('planSave').onclick = async () => {
+  const m = $('planFrom').value || thisMonth(), y = m.slice(0, 4), v = planDraft.values;
+  const mObj = Object.fromEntries(MONTHLY_CATS.map(c => [c, v[planKey('M', c)] || 0]).filter(([, a]) => a > 0));
+  const yObj = Object.fromEntries(ANNUAL_CATS.map(c => [c, v[planKey('Y', c)] || 0]).filter(([, a]) => a > 0));
+  const had = hasBudget(m) || Object.keys(state.annualBudgets[y] || {}).length;
+  if (had && !confirm(`${monthLabel(m)} 월간 예산과 ${y}년 연간 예산을 이 금액으로 바꿀까요?\n(월간 ${won(sum(Object.values(mObj)))}, 연간 ${won(sum(Object.values(yObj)))})`)) return;
+  $('planSave').disabled = true;
+  try {
+    await savePlanProfile();
+    const keepM = Object.fromEntries(Object.entries(state.budgets[m] || {}).filter(([c]) => !MONTHLY_CATS.includes(c)));
+    const keepY = Object.fromEntries(Object.entries(state.annualBudgets[y] || {}).filter(([c]) => !ANNUAL_CATS.includes(c)));
+    await run('예산 저장', async () => {
+      await replaceBudgets('month', m, { ...keepM, ...mObj });
+      await replaceBudgets('year', y, { ...keepY, ...yObj });
+    });
+    toast(`${monthLabel(m)} 예산과 ${y}년 연간 예산을 저장했어요`);
+  } catch {} finally { $('planSave').disabled = false; }
+  renderPlan();
+};
+// 홈: 조건을 아직 안 넣었으면 안내
+function renderPlanNotice() {
+  $('planNotice').hidden = hasProfile() || lsGet(PLAN_DISMISS) === '1';
+}
+$('planNotice').addEventListener('click', e => {
+  const act = e.target.closest('button')?.dataset.act;
+  if (act === 'plan-later') { lsSet(PLAN_DISMISS, '1'); renderPlanNotice(); toast('더보기 → 우리 가족 조건에서 언제든 할 수 있어요'); }
+  else if (act === 'plan-go') switchTab('plan');
+});
+
 /* ---------- 개인별 통계 ---------- */
 let statUser = null;   // 처음엔 이 기기 사용자
 $('stPeople').addEventListener('click', e => {
@@ -1475,8 +1689,8 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $('exportJson').onclick = () => {
-  const { items, budgets, annualBudgets, users, avatars, rules, recurring } = state;
-  download(`가계부_백업_${todayISO()}.json`, JSON.stringify({ version: 3, items: items.map(({ id, ...i }) => i), budgets, annualBudgets, users, avatars, rules, recurring }, null, 2), 'application/json');
+  const { items, budgets, annualBudgets, users, avatars, profile, rules, recurring } = state;
+  download(`가계부_백업_${todayISO()}.json`, JSON.stringify({ version: 3, items: items.map(({ id, ...i }) => i), budgets, annualBudgets, users, avatars, profile, rules, recurring }, null, 2), 'application/json');
 };
 $('importJson').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';

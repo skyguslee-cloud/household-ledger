@@ -417,3 +417,35 @@ dialog.sheet.tall { max-width: 640px; width: min(640px, 100vw); }
 .av-grid button:hover { border-color: var(--strong); }
 .av-grid button.on { border: 2px solid var(--strong); background: var(--soft); }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* 우리 가족 조건 · 예산 추천 */
+.plan-form fieldset { border: none; padding: 0; margin: 0 0 16px; }
+.plan-form fieldset:last-child { margin-bottom: 0; }
+.plan-form legend { font-weight: 700; font-size: .9rem; padding: 0; margin-bottom: 8px; }
+.plan-form legend small { color: var(--muted); font-weight: 500; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.plan-grid label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; color: var(--muted); font-weight: 600; min-width: 0; }
+.plan-grid label small { font-weight: 400; }
+.plan-grid label > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plan-grid input, .plan-grid select { width: 100%; min-width: 0; color: var(--text); }
+.plan-grid input[type=number] { text-align: right; }
+#tab-plan .summary { margin-bottom: 4px; }
+.plan td small { display: block; }
+.plan td .chip { margin-left: 4px; }
+.plan .why small { color: var(--muted); }
+.plan input { width: 120px; }
+.plan .mob { display: none; }
+.plan tr.grp td { font-weight: 700; background: var(--soft); border-bottom: none; padding-top: 8px; padding-bottom: 8px; }
+.plan tr.grp small { color: var(--muted); font-weight: 500; margin-left: 4px; display: inline; }
+#tab-plan .toolbar input[type=month] { width: auto; }
+@media (max-width: 680px) {
+  .plan .why { display: none; }
+  .plan .mob { display: block; color: var(--muted); max-width: 96px; white-space: normal; margin-left: auto; }
+  .plan td:first-child { white-space: normal; word-break: keep-all; }
+  .plan td .chip { display: block; width: fit-content; margin: 3px 0 0; }
+  .plan input { width: 92px; }
+  .plan-grid { grid-template-columns: 1fr 1fr; }
+  #tab-plan .toolbar .spacer { display: none; }
+  #tab-plan .toolbar .btn { flex: 1; white-space: nowrap; }
+  #tab-plan .toolbar label.inline { flex-basis: 100%; justify-content: space-between; }
+}
