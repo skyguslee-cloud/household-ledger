@@ -122,7 +122,7 @@ function agoText(t) {
 function setSync(text, kind = 'ok') {
   syncState = kind;
   $('sync').className = 'sync ' + kind;
-  $('sync').querySelector('span').textContent = kind === 'ok' && lastLoad ? `동기화됨 · ${agoText(lastLoad)} ↻` : text;
+  $('sync').querySelector('span').textContent = kind === 'ok' && lastLoad ? `${liveOn ? '● 실시간' : '동기화됨'} · ${agoText(lastLoad)} ↻` : text;
 }
 setInterval(() => { if (syncState === 'ok' && sb) setSync(''); }, 30000);
 
@@ -167,9 +167,9 @@ const toRow = i => ({ space_id: ledgerKey, date: i.date, time: i.time || '', typ
   method: i.method || '', memo: i.memo || '', amount: i.amount, recurring_id: i.recurring_id || null, rec_month: i.rec_month || null,
   source: SOURCES.includes(i.source) ? i.source : (i.recurring_id ? 'auto' : 'manual') });
 const recFromRow = r => ({ id: r.id, title: r.title, type: r.type, category: r.category, user: r.user_idx, method: r.method || '',
-  day: r.day, versions: r.versions || [], skips: r.skips || [], end_month: r.end_month || null });
+  day: r.day, versions: r.versions || [], skips: r.skips || [], end_month: r.end_month || null, installment: r.installment || null });
 const recToRow = r => ({ space_id: ledgerKey, title: r.title, type: r.type, category: r.category, user_idx: r.user, method: r.method || '',
-  day: r.day, versions: r.versions, skips: r.skips, end_month: r.end_month || null });
+  day: r.day, versions: r.versions, skips: r.skips, end_month: r.end_month || null, installment: r.installment || null });
 
 async function fetchAllEntries() {
   const out = [], size = 1000;
@@ -205,7 +205,7 @@ async function loadAll() {
 // 저장 작업 공통 처리: 상태 표시 + 오류 알림
 async function run(label, fn) {
   setSync('저장 중…', 'busy');
-  try { const r = await fn(); lastLoad = Date.now(); setSync('동기화됨'); return r; }
+  try { const r = await fn(); lastLoad = Date.now(); setSync('동기화됨'); notifyLive(); return r; }
   catch (e) { console.error(e); setSync('저장 안 됨 · 눌러서 다시 시도', 'err'); toast(`${label} 실패 — ${friendlyError(e)}`); throw e; }
 }
 
@@ -416,7 +416,7 @@ function setOwner(el, owner) {
 }
 function refreshUserSelects() {
   $('fUser').innerHTML = userOptions($('fUser').value, true);
-  for (const id of ['fmUser', 'smsUser', 'rcUser']) {
+  for (const id of ['fmUser', 'smsUser', 'rcUser', 'inUser']) {
     const el = $(id), owner = el.dataset.owner != null ? +el.dataset.owner : null;
     el.innerHTML = userOptions(owner ?? defaultUser());
     applyUserLock(el, owner);
@@ -470,7 +470,7 @@ $('month').addEventListener('change', () => { if ($('month').value) renderAll();
 
 function renderAll() {
   refreshMethods();
-  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, settle: renderSettle, plan: renderPlan, stats: renderStats, fixed: renderRecurring, settings: renderSettings }[currentTab] || (() => {}))();
+  ({ home: renderHome, ledger: renderLedger, budget: renderBudget, settle: renderSettle, plan: renderPlan, stats: renderStats, fixed: renderRecurring, settings: renderSettings, import: renderImport }[currentTab] || (() => {}))();
 }
 
 /* ---------- 홈: 분류별 블록 ---------- */
@@ -745,8 +745,8 @@ function matchItem(i, q) {
   const n = q.replace(/[,원\s]/g, '');
   return /^\d+$/.test(n) && String(Math.abs(i.amount)).includes(n);
 }
-const srcTag = i => i.source === 'auto' || i.recurring_id ? '<span class="chip solid">자동</span>'
-  : i.source === 'sms' ? '<span class="chip">문자</span>' : '';
+const srcTag = i => instTag(i) || (i.source === 'auto' || i.recurring_id ? '<span class="chip solid">자동</span>'
+  : i.source === 'sms' ? '<span class="chip">문자</span>' : '');
 
 // 삭제 → 아래에 '되돌리기' 6초 표시 (자동 내역이면 그 달은 다시 생성되지 않게 기록)
 async function deleteItem(it) {
@@ -1557,9 +1557,118 @@ function resetRecForm() {
 }
 $('rcCancel').onclick = resetRecForm;
 
+/* ---------- 카드 할부 ----------
+   고정 항목 하나 = 할부 한 건. installment: { total, months, start(첫 청구 달), payoff(중도 완납일) }
+   금액은 versions 로: 첫 달 = 기본 + 끝전, 둘째 달부터 = 기본. 마지막 달이 end_month. */
+const isInst = r => !!r.installment;
+function instSplit(total, months) { const base = Math.floor(total / months); return { first: total - base * (months - 1), base }; }
+function instSchedule(r) {
+  const out = [];
+  for (let k = 0; k < r.installment.months; k++) { const m = shiftMonth(r.installment.start, k); out.push({ m, amount: recAmount(r, m) || 0 }); }
+  return out;
+}
+function instStatus(r) {
+  const now = thisMonth(), today = todayISO(), sch = instSchedule(r);
+  let paidN = sch.filter(s => s.m < now || (s.m === now && today >= recDate(r, s.m))).length;
+  let remain = sum(sch.slice(paidN).map(s => s.amount));
+  const done = !!r.installment.payoff || paidN >= sch.length;
+  if (r.installment.payoff) { paidN = sch.length; remain = 0; }
+  return { n: sch.length, paidN, remain, last: sch[sch.length - 1].m, next: done ? null : sch[paidN], done };
+}
+// 내역 옆 표시: '할부 3/12'
+function instTag(i) {
+  const r = i.recurring_id && state.recurring.find(x => x.id === i.recurring_id);
+  if (!r || !isInst(r) || !i.rec_month) return '';
+  const k = instSchedule(r).findIndex(s => s.m === i.rec_month);
+  return k < 0 ? '' : `<span class="chip solid">할부 ${k + 1}/${r.installment.months}</span>`;
+}
+function renderInstallments() {
+  const list = state.recurring.filter(isInst).map(r => ({ r, s: instStatus(r) }))
+    .sort((a, b) => a.s.done - b.s.done || a.s.last.localeCompare(b.s.last));
+  const active = list.filter(x => !x.s.done);
+  const monthly = sum(active.map(x => x.s.next?.amount || 0)), remain = sum(active.map(x => x.s.remain));
+  $('instSum').innerHTML = active.length ? `진행 중 ${active.length}건 · 남은 금액 <b>${won(remain)}</b>` : '';
+  $('instList').innerHTML = list.length ? list.map(({ r, s }) => `<div class="rec inst ${s.done ? 'stopped' : ''}" data-id="${r.id}">
+      <div>
+        <div class="name">${esc(r.title)} <span class="chip">${s.done ? (r.installment.payoff ? '중도 완납' : '완납') : `${s.paidN}/${s.n}회`}</span></div>
+        <div class="meta">${catLabel(r.category)} · ${userBadge(r.user)}${r.method ? ' · ' + esc(r.method) : ''} · 총 ${won(r.installment.total)} · ${r.installment.months}개월 · ${monthLabel(r.installment.start)}~${monthLabel(s.last)} · 매월 ${r.day}일</div>
+        ${bar(s.paidN / s.n * 100).replace(/bar (ok|warn|over)/, 'bar')}
+      </div>
+      <div>
+        <div class="money">${s.done ? '끝' : won(s.next.amount)}<small>${s.done ? '' : `${s.next.m === thisMonth() ? '이번 달' : monthLabel(s.next.m)} 청구 · 남은 ${won(s.remain)}`}</small></div>
+        <div class="ops">
+          ${s.done ? '' : '<button class="btn sm" data-iop="payoff">중도 완납</button>'}
+          <button class="btn sm ghost" data-iop="delete">삭제</button>
+        </div>
+      </div>
+    </div>`).join('') : '<div class="empty">등록된 할부가 없어요. 아래에서 할부로 산 물건을 등록하세요.</div>';
+  if (monthly && active.length) $('instSum').innerHTML += ` · 다음 청구 합계 ${won(monthly)}`;
+}
+function fillInstForm() {
+  $('inCat').innerHTML = CATS.expense.map(c => `<option value="${esc(c)}">${ce(c)}${esc(c)}</option>`).join('');
+  $('inCat').value = '가전/가구';
+  $('inStart').value = shiftMonth(thisMonth(), 1);
+  instPreview();
+}
+function instPreview() {
+  const total = Math.round(+$('inTotal').value), months = Math.round(+$('inMonths').value), start = $('inStart').value;
+  $('inPastWrap').hidden = !(start && start < thisMonth());
+  if (!(total >= months && months >= 2 && start)) { $('instPreview').textContent = ''; return; }
+  const { first, base } = instSplit(total, months), last = shiftMonth(start, months - 1);
+  $('instPreview').innerHTML = `매달 <b>${won(base)}</b>${first !== base ? ` (첫 달 ${won(first)})` : ''} · ${monthLabel(start)}부터 ${monthLabel(last)}까지 ${months}번`;
+}
+$('instForm').addEventListener('input', instPreview);
+$('instForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const total = Math.round(+$('inTotal').value), months = Math.round(+$('inMonths').value), start = $('inStart').value;
+  if (!/^\d{4}-\d{2}$/.test(start) || months < 2 || months > 60 || total < months) return toast('금액과 개월 수를 확인해 주세요');
+  const { first, base } = instSplit(total, months), now = thisMonth();
+  const versions = first === base ? [{ from: start, amount: base }] : [{ from: start, amount: first }, { from: shiftMonth(start, 1), amount: base }];
+  const skips = [];
+  if (!$('inPast').checked) for (let m = start; m < now && skips.length < months; m = shiftMonth(m, 1)) skips.push(m);
+  const r = { title: $('inTitle').value.trim(), type: 'expense', category: $('inCat').value, user: +$('inUser').value,
+    method: $('inMethod').value.trim(), day: Math.min(31, Math.max(1, +$('inDay').value || 1)),
+    versions, skips, end_month: shiftMonth(start, months - 1), installment: { total, months, start } };
+  $('inSubmit').disabled = true;
+  try {
+    const n = await run('할부 등록', async () => { await saveRecurring(r); return generateRecurring(); });
+    toast(`할부를 등록했어요${n ? ` · ${n}회차 기록` : ''}`);
+    $('instForm').reset(); $('inMonths').value = 12; $('inDay').value = 15; fillInstForm(); setOwner($('inUser'), null); refreshUserSelects();
+    renderInstallments();
+  } catch {} finally { $('inSubmit').disabled = false; }
+});
+$('instList').addEventListener('click', async e => {
+  const op = e.target.dataset.iop; if (!op) return;
+  const r = state.recurring.find(x => x.id === e.target.closest('.rec').dataset.id); if (!r) return;
+  try {
+    if (op === 'payoff') {
+      const s = instStatus(r), now = thisMonth();
+      if (!confirm(`'${r.title}' 남은 ${won(s.remain)}을 오늘 한 번에 갚은 것으로 기록할까요?\n앞으로 매달 기록은 멈춥니다.`)) return;
+      await run('중도 완납', async () => {
+        // 이번 달 회차가 아직 안 나갔으면 이번 달부터 멈춤
+        const end = s.next.m === now ? shiftMonth(now, -1) : now;
+        await saveRecurring({ ...r, end_month: end < r.installment.start ? null : end, skips: end < r.installment.start ? instSchedule(r).map(x => x.m) : r.skips,
+          installment: { ...r.installment, payoff: todayISO() } });
+        await addEntries([{ date: todayISO(), time: '', type: 'expense', category: r.category, user: r.user, method: r.method,
+          memo: `${r.title} 할부 중도 완납`, amount: s.remain, source: 'manual' }]);
+      });
+      toast('중도 완납으로 기록했어요');
+    } else if (op === 'delete') {
+      if (!confirm(`'${r.title}' 할부를 삭제할까요?\n이미 기록된 회차 내역은 남고, 앞으로 기록만 멈춥니다.`)) return;
+      await run('할부 삭제', async () => {
+        await q(sb.from('ledger_recurring').delete().eq('id', r.id));
+        state.recurring = state.recurring.filter(x => x.id !== r.id);
+      });
+    }
+  } catch {}
+  renderInstallments();
+});
+
 function renderRecurring() {
+  renderInstallments();
   const now = thisMonth(), next = shiftMonth(now, 1);
-  $('recList').innerHTML = state.recurring.length ? state.recurring.map(r => {
+  const recs = state.recurring.filter(r => !isInst(r));
+  $('recList').innerHTML = recs.length ? recs.map(r => {
     const cur = recAmount(r, now), nxt = recAmount(r, next), start = recStart(r);
     const stopped = r.end_month && r.end_month < next;
     const upcoming = sortedVersions(r).filter(v => v.from > now).map(v => `${monthLabel(v.from)}부터 ${won(v.amount)}`).join(' · ');
@@ -1758,7 +1867,7 @@ $('exportCsv').onclick = () => {
 };
 $('disconnect').onclick = () => {
   if (!confirm('이 기기에서 가계부 연결을 해제할까요?\n데이터는 DB에 그대로 있고, 키나 초대 링크로 다시 연결할 수 있습니다.')) return;
-  lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState(); myAlias = undefined;
+  stopLive(); lsSet(KEY_STORE, null); lsSet(ME_STORE, null); sb = null; ledgerKey = null; state = emptyState(); myAlias = undefined;
   showGate();
 };
 $('clearAll').onclick = async () => {
@@ -1790,11 +1899,11 @@ async function connect(key) {
     return false;
   }
   lsSet(KEY_STORE, key);
-  showApp(); refreshUserSelects(); resetRecForm();
+  showApp(); refreshUserSelects(); resetRecForm(); fillInstForm();
   if (me() == null) openMeDialog(true);   // 처음 접속: 누구인지 고르기
   try { await generateRecurring(); } catch (e) { console.error(e); }
   await runCarry();
-  setSync('동기화됨');
+  setSync('동기화됨'); startLive().catch(e => console.error('live', e));
   renderAll();
   return true;
 }
@@ -1936,7 +2045,7 @@ async function refresh({ auto = false } = {}) {
   } catch (e) {
     console.error(e);
     if (e.code === 'NOT_FOUND') {   // 가계부가 없어졌으면 연결 화면으로
-      lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
+      stopLive(); lsSet(KEY_STORE, null); sb = null; ledgerKey = null; state = emptyState();
       showGate('이 가계부를 찾을 수 없습니다. 초대 링크를 다시 받아 주세요.');
     } else { setSync('연결 안 됨 · 눌러서 다시 시도', 'err'); if (!auto) toast(friendlyError(e)); }
   }
@@ -1947,6 +2056,40 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Date.now() - lastLoad > 20000) refresh({ auto: true });
 });
 setInterval(() => { if (document.visibilityState === 'visible') refresh({ auto: true }); }, 60000);
+
+/* ---------- 실시간 반영 ----------
+   누가 저장하면 같은 가계부를 연 다른 기기에 '바뀜' 신호만 보냄 (내용은 보내지 않음).
+   채널 이름은 가계부 키의 해시라서 키 자체는 드러나지 않음. 받은 기기는 입력 중이 아닐 때 새로 불러옴. */
+var live = null, liveOn = false, livePending = null, liveTimer = null, liveSendTimer = null;   // var: 위쪽 setSync 에서도 씀
+async function startLive() {
+  stopLive();
+  if (!sb || !window.crypto?.subtle) return;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('ledger-live:' + ledgerKey));
+  const h = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  const ch = sb.channel('ledger-' + h, { config: { broadcast: { self: false } } });
+  ch.on('broadcast', { event: 'changed' }, ({ payload }) => { livePending = { who: payload?.who }; tryLive(); })
+    .subscribe(st => { liveOn = st === 'SUBSCRIBED'; if (syncState === 'ok') setSync(''); });
+  live = ch;
+}
+function stopLive() {
+  clearTimeout(liveTimer); livePending = null; liveOn = false;
+  if (live) { try { sb?.removeChannel(live); } catch {} live = null; }
+}
+function tryLive() {
+  clearTimeout(liveTimer);
+  if (!livePending || !sb) return;
+  if (refreshing || isBusyEditing() || document.visibilityState !== 'visible') { liveTimer = setTimeout(tryLive, 3000); return; }
+  const { who } = livePending; livePending = null;
+  refresh({ auto: true }).then(() => {
+    const name = Number.isInteger(who) && who !== me() ? state.users[who] : '가족';
+    toast(`${name}이(가) 바꾼 내용을 바로 반영했어요`);
+  });
+}
+function notifyLive() {
+  if (!live || !liveOn) return;
+  clearTimeout(liveSendTimer);
+  liveSendTimer = setTimeout(() => live?.send({ type: 'broadcast', event: 'changed', payload: { who: me() } }).catch(() => {}), 300);
+}
 
 // 다이얼로그 바깥(어두운 배경)을 눌렀는지
 function outsideDialog(e, d) {
@@ -2078,3 +2221,248 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:')
   const key = hash?.[1] || stored;
   if (key) connect(key); else showGate();
 })();
+
+/* ---------- 엑셀·다른 가계부 가져오기 ----------
+   파일(xlsx/xls/csv)을 읽어 열을 맞춘 뒤 지금 내역에 더함. 같은 날짜·구분·금액·내용이 이미 있으면 건너뜀.
+   엑셀 읽기(SheetJS, lib/xlsx.full.min.js)는 이 화면에서 파일을 고를 때만 불러옴. */
+var imp = null;   // { name, book, rows, head, map }
+const IMP_FIELDS = [
+  ['date', '날짜 *', /날짜|일자|일시|거래일|이용일|승인일|사용일|date/i],
+  ['inAmt', '수입(입금) 금액 · 따로 있을 때', /입금|수입금액|받은/i],
+  ['amount', '금액 *', /금액|출금|amount/i],
+  ['sub', '소분류', /소분류|세부|sub/i],
+  ['cat', '분류', /분류|카테고리|항목|category/i],
+  ['type', '구분 (수입/지출)', /구분|타입|유형|수입.?지출|type/i],
+  ['time', '시간', /시간|시각|time/i],
+  ['memo', '내용', /내용|메모|적요|사용처|가맹점|상호|이용처|거래처|내역|memo|desc|note/i],
+  ['method', '결제수단', /결제수단|수단|자산|카드|계좌|method|account/i],
+  ['user', '사용자', /사용자|사람|이름|user|name/i]
+];
+const IMP_MAX = 5000;
+const CAT_SYN = { '외식': '식비', '배달': '식비', '음식': '식비', '카페': '카페/간식', '간식': '카페/간식', '마트': '편의점/마트/잡화',
+  '편의점': '편의점/마트/잡화', '생필품': '생활', '패션': '의류쇼핑', '의류': '의류쇼핑', '뷰티': '미용', '주거': '주거/통신', '통신': '주거/통신',
+  '관리비': '주거/통신', '교통': '교통/자동차', '자동차': '교통/자동차', '주유': '교통/자동차', '병원': '의료/건강', '의료': '의료/건강',
+  '여행': '여행/숙박', '숙박': '여행/숙박', '문화': '문화/여가', '취미': '문화/여가', '경조사': '경조/선물', '선물': '경조/선물',
+  '육아': '자녀/육아', '자녀': '자녀/육아', '보험': '보험/세금/금융', '세금': '보험/세금/금융', '금융': '보험/세금/금융',
+  '반려': '반려동물', '가구': '가전/가구', '가전': '가전/가구', '기부': '기부/후원', '월급': '급여', '보너스': '상여금',
+  '이자': '금융수입', '캐시백': '환급/캐시백', '저축': '저축/투자', '투자': '저축/투자', '카드대금': '카드대금' };
+
+function renderImport() {
+  $('impUser').innerHTML = userOptions($('impUser').value !== '' ? +$('impUser').value : defaultUser());
+}
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'lib/xlsx.full.min.js'; s.onload = ok; s.onerror = () => no(new Error('엑셀 읽기 기능을 불러오지 못했어요'));
+    document.head.appendChild(s);
+  });
+}
+function impReset() {
+  imp = null; $('impMapCard').hidden = true; $('impPrevCard').hidden = true; $('impFileName').textContent = '';
+}
+$('impFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  $('impFileName').textContent = `${file.name} 읽는 중…`;
+  try {
+    await loadXLSX();
+    const buf = new Uint8Array(await file.arrayBuffer());
+    let book;
+    if (/\.(csv|txt)$/i.test(file.name)) {   // 한국 은행 CSV는 EUC-KR인 경우가 많음
+      let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { text = new TextDecoder('euc-kr').decode(buf); }
+      book = XLSX.read(text.replace(/^﻿/, ''), { type: 'string', raw: true });
+    } else book = XLSX.read(buf, { type: 'array' });
+    imp = { name: file.name, book };
+    $('impSheet').innerHTML = book.SheetNames.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join('');
+    $('impSheet').hidden = book.SheetNames.length < 2;
+    // 줄이 가장 많은 시트부터
+    const best = book.SheetNames.map((n, i) => [i, XLSX.utils.sheet_to_json(book.Sheets[n], { header: 1 }).length]).sort((a, b) => b[1] - a[1])[0][0];
+    $('impSheet').value = best;
+    useSheet(best);
+    $('impFileName').textContent = file.name;
+  } catch (err) {
+    console.error(err);
+    impReset();
+    toast(/password|encrypt/i.test(err.message || '') ? '비밀번호가 걸린 파일이에요. 엑셀에서 비밀번호를 풀고 다시 저장해 주세요'
+      : '파일을 읽지 못했어요. 엑셀(.xlsx)이나 CSV로 다시 저장해 보세요');
+  }
+});
+$('impSheet').addEventListener('change', () => useSheet(+$('impSheet').value));
+
+function useSheet(idx) {
+  const ws = imp.book.Sheets[imp.book.SheetNames[idx]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })
+    .map(r => r.map(v => typeof v === 'string' ? v.trim() : v));
+  // 제목 줄: 처음 20줄 중 짐작되는 열이 가장 많은 줄
+  let head = 0, bestScore = -1;
+  rows.slice(0, 20).forEach((r, i) => {
+    const score = IMP_FIELDS.filter(([, , re]) => r.some(c => typeof c === 'string' && c.length <= 20 && re.test(c))).length;
+    if (score > bestScore) { bestScore = score; head = i; }
+  });
+  imp.rows = rows; imp.head = head; imp.map = {};
+  const titles = rows[head] || [], used = new Set();
+  for (const [f, , re] of IMP_FIELDS) {
+    const c = titles.findIndex((t, i) => !used.has(i) && typeof t === 'string' && t.length <= 20 && re.test(t));
+    if (c >= 0) { imp.map[f] = c; used.add(c); }
+  }
+  // 날짜 열을 못 찾았으면 날짜처럼 보이는 첫 열
+  if (imp.map.date == null) {
+    const sample = rows[head + 1] || [];
+    const c = sample.findIndex((v, i) => !used.has(i) && impDate(v));
+    if (c >= 0) imp.map.date = c;
+  }
+  // 음수 금액이 섞여 있으면 보통 '−는 지출, +는 수입'
+  const amts = impBody().map(r => impNum(r[imp.map.amount])).filter(v => v);
+  $('impPlus').value = amts.some(v => v < 0) ? 'income' : 'expense';
+  renderImport(); renderImpMap(); renderImpPreview();
+}
+const impBody = () => imp.rows.slice(imp.head + 1).filter(r => r.some(v => v !== ''));
+function colName(i) { let s = ''; for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; }
+function renderImpMap() {
+  const titles = imp.rows[imp.head] || [], sample = impBody()[0] || [];
+  const ncol = Math.max(titles.length, ...imp.rows.slice(0, 50).map(r => r.length));
+  const opts = [...Array(ncol).keys()].map(i => {
+    const t = String(titles[i] ?? '').slice(0, 14), v = String(sample[i] ?? '').slice(0, 14);
+    return `<option value="${i}">${colName(i)}열${t ? ' · ' + esc(t) : ''}${v && v !== t ? ` (예: ${esc(v)})` : ''}</option>`;
+  }).join('');
+  $('impMap').innerHTML = IMP_FIELDS.map(([f, label]) => `<label><span>${label}</span>
+    <select data-imp="${f}"><option value="">— 없음 —</option>${opts}</select></label>`).join('');
+  $('impMap').querySelectorAll('select').forEach(s => s.value = imp.map[s.dataset.imp] ?? '');
+  $('impMapCard').hidden = false;
+}
+$('impMap').addEventListener('change', e => {
+  const f = e.target.dataset.imp; if (!f) return;
+  if (e.target.value === '') delete imp.map[f]; else imp.map[f] = +e.target.value;
+  renderImpPreview();
+});
+$('impUser').addEventListener('change', () => imp && renderImpPreview());
+$('impPlus').addEventListener('change', () => imp && renderImpPreview());
+
+function impNum(v) {
+  if (typeof v === 'number') return Math.round(v);
+  let s = String(v ?? '').replace(/[,\s원₩]/g, '');
+  const neg = /^\(.*\)$/.test(s) || /^[-−]/.test(s);
+  s = s.replace(/[()+\-−]/g, '');
+  if (!/^\d+(\.\d+)?$/.test(s)) return 0;
+  return Math.round(+s) * (neg ? -1 : 1);
+}
+// 날짜: 엑셀 날짜 숫자, 2026-11-12, 2026.11.12, 2026/11/12, 2026년 11월 12일, 26.11.12, 20261112 (+ 시간)
+function impDate(v) {
+  const ok = (y, m, d) => y >= 2000 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= daysIn(y, m) ? `${y}-${pad(m)}-${pad(d)}` : null;
+  if (v instanceof Date && !isNaN(v)) { const date = ok(v.getFullYear(), v.getMonth() + 1, v.getDate()); return date ? { date, time: '' } : null; }
+  if (typeof v === 'number') {
+    if (v < 30000 || v > 80000) return null;
+    const d = new Date(Math.round((v - 25569) * 864e5));
+    const date = ok(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    const time = v % 1 > 0.0001 ? `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}` : '';
+    return date ? { date, time } : null;
+  }
+  const s = String(v ?? '');
+  let m = s.match(/(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/) || s.match(/^(\d{4})(\d{2})(\d{2})(?!\d)/);
+  let date = m && ok(+m[1], +m[2], +m[3]);
+  if (!date && (m = s.match(/^(\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})(?!\d)/))) date = ok(2000 + +m[1], +m[2], +m[3]);
+  if (!date) return null;
+  const t = s.slice(m.index + m[0].length).match(/(\d{1,2}):(\d{2})/);
+  return { date, time: t && +t[1] < 24 ? `${pad(+t[1])}:${t[2]}` : '' };
+}
+function impTime(v) {
+  if (typeof v === 'number' && v >= 0 && v < 1) { const mins = Math.round(v * 1440); return `${pad(Math.floor(mins / 60) % 24)}:${pad(mins % 60)}`; }
+  const t = String(v ?? '').match(/(\d{1,2}):(\d{2})/);
+  return t && +t[1] < 24 ? `${pad(+t[1])}:${t[2]}` : '';
+}
+function impCat(type, sub, cat, memo) {
+  const list = CATS[type];
+  for (const raw of [sub, cat]) {
+    const c = RENAMED[raw] || raw;
+    if (!c) continue;
+    if (list.includes(c)) return c;
+    const parts = c.split(/[\/·,>\s]+/).filter(Boolean);
+    const hit = list.find(x => x.split('/').some(p => parts.includes(p)));
+    if (hit) return hit;
+    for (const p of parts) for (const [k, v] of Object.entries(CAT_SYN)) if (p.includes(k) && list.includes(v)) return v;
+  }
+  return guessCategory(type, memo, memo);
+}
+function impConvert() {
+  const M = imp.map, get = (r, f) => M[f] == null ? '' : r[M[f]];
+  const plus = $('impPlus').value, minus = plus === 'income' ? 'expense' : 'income';
+  const defUser = +$('impUser').value || 0;
+  const out = [], skip = { noDate: 0, zero: 0, dup: 0 };
+  // 이미 있는 내역 세기 (같은 날 같은 커피 두 잔은 둘 다 살림)
+  const keyOf = i => `${i.date}|${i.type}|${Math.abs(i.amount)}|${String(i.memo || '').replace(/\s+/g, '')}`;
+  const have = new Map();
+  state.items.forEach(i => have.set(keyOf(i), (have.get(keyOf(i)) || 0) + 1));
+  for (const r of impBody()) {
+    const d = impDate(get(r, 'date'));
+    if (!d) { skip.noDate++; continue; }
+    const amt = impNum(get(r, 'amount')), inA = impNum(get(r, 'inAmt'));
+    const tt = String(get(r, 'type') ?? '');
+    let type, amount;
+    if (M.type != null && tt) {
+      type = /수입|입금|income/i.test(tt) ? 'income' : /이체|transfer|저축|투자/i.test(tt) ? 'transfer' : 'expense';
+      amount = Math.abs(amt || inA);
+      if (/취소|환불/.test(tt) && type === 'expense') amount = -amount;
+    } else if (M.inAmt != null && inA > 0 && !amt) { type = 'income'; amount = inA; }
+    else if (amt) { type = amt > 0 ? plus : minus; amount = Math.abs(amt); }
+    else { skip.zero++; continue; }
+    if (!amount) { skip.zero++; continue; }
+    const memo = String(get(r, 'memo') ?? '').slice(0, 200);
+    const sub = String(get(r, 'sub') ?? ''), cat = String(get(r, 'cat') ?? '');
+    const uname = String(get(r, 'user') ?? '');
+    const ui = uname ? state.users.findIndex(n => n === uname) : -1;
+    const item = { date: d.date, time: impTime(get(r, 'time')) || d.time, type, category: impCat(type, sub, cat, memo),
+      user: ui >= 0 ? ui : defUser, method: String(get(r, 'method') ?? '').slice(0, 40),
+      memo: (memo || sub || cat).slice(0, 200), amount, source: 'manual', from: [cat, sub].filter(Boolean).join(' > ') };
+    const k = keyOf(item);
+    if (have.get(k) > 0) { have.set(k, have.get(k) - 1); skip.dup++; continue; }
+    out.push(item);
+  }
+  return { out, skip };
+}
+function renderImpPreview() {
+  $('impPrevCard').hidden = false;
+  if (imp.map.date == null || (imp.map.amount == null && imp.map.inAmt == null)) {
+    $('impPrevTitle').textContent = '미리보기';
+    $('impSummary').innerHTML = '<b>날짜</b>와 <b>금액</b> 열을 골라 주세요.';
+    $('impPrev').innerHTML = ''; $('impNote').textContent = ''; $('impAdd').disabled = true; $('impAdd').textContent = '가져오기'; return;
+  }
+  const { out, skip } = impConvert();
+  const tot = t => sum(out.filter(i => i.type === t).map(i => i.amount));
+  const unk = out.filter(i => i.category === DEFAULT_CAT[i.type]).length;
+  const dates = out.map(i => i.date).sort();
+  $('impPrevTitle').textContent = `미리보기 · ${out.length}건`;
+  $('impSummary').innerHTML = out.length
+    ? `<b>${out.length}건</b> · ${dates[0]} ~ ${dates[dates.length - 1]} · 지출 <b>${won(tot('expense'))}</b> · 수입 <b>${won(tot('income'))}</b>${tot('transfer') ? ` · 이체 ${won(tot('transfer'))}` : ''}`
+    : '가져올 내역이 없어요. 열을 다시 맞춰 보세요.';
+  $('impPrev').innerHTML = out.slice(0, 30).map(i => `<tr>
+      <td class="d">${i.date.slice(2).replace(/-/g, '.')}${i.time ? `<small>${i.time}</small>` : ''}</td>
+      <td class="t"><b>${catLabel(i.category)}</b><span class="memo">${esc(i.memo)}</span>
+        <small>${userBadge(i.user)} · ${TYPES[i.type]}${i.method ? ' · ' + esc(i.method) : ''}${i.from ? ' · 원래: ' + esc(i.from) : ''}</small></td>
+      <td class="num amt ${i.amount < 0 ? 'refund' : i.type}">${fmt(i.amount)}</td></tr>`).join('');
+  const notes = [];
+  if (out.length > 30) notes.push('앞의 30건만 보여요.');
+  if (skip.dup) notes.push(`이미 있는 내역 ${skip.dup}건은 건너뛰어요.`);
+  if (skip.noDate) notes.push(`날짜를 읽지 못한 ${skip.noDate}줄은 건너뛰어요 (합계 줄 등).`);
+  if (skip.zero) notes.push(`금액이 없는 ${skip.zero}줄은 건너뛰어요.`);
+  if (unk) notes.push(`분류를 못 찾은 ${unk}건은 미분류·기타로 들어가요. 가져온 뒤 내역에서 고치면 다음부터 기억해요.`);
+  if (out.length > IMP_MAX) notes.push(`한 번에 ${IMP_MAX}건까지 가져올 수 있어요. 파일을 나눠 주세요.`);
+  $('impNote').textContent = notes.join(' ');
+  $('impAdd').disabled = !out.length || out.length > IMP_MAX;
+  $('impAdd').textContent = out.length ? `${out.length}건 가져오기` : '가져오기';
+}
+$('impAdd').onclick = async () => {
+  if (!imp) return;
+  const { out } = impConvert();
+  if (!out.length || out.length > IMP_MAX) return;
+  if (!confirm(`${out.length}건을 지금 가계부에 더할까요?\n(지금 내역은 그대로 남아요)`)) return;
+  $('impAdd').disabled = true;
+  try {
+    await run('가져오기', () => addEntries(out.map(({ from, ...i }) => i)));
+    toast(`${out.length}건을 가져왔어요`);
+    impReset();
+    $('month').value = out.map(i => i.date).sort().pop().slice(0, 7);
+    switchTab('ledger');
+  } catch {} finally { $('impAdd').disabled = false; }
+};

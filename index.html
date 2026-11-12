@@ -82,7 +82,7 @@
       <button data-tab="ledger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>내역</button>
       <button class="fab" id="fab" aria-label="내역 추가"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <button data-tab="budget" data-group="settle plan"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></svg>예산</button>
-      <button data-tab="more" data-group="stats sms fixed settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>더보기</button>
+      <button data-tab="more" data-group="stats sms fixed settings import"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>더보기</button>
     </nav>
 
     <!-- ===== 더보기 ===== -->
@@ -91,7 +91,8 @@
         <button data-tab="plan"><b>우리 가족 조건 · 예산 추천</b><small>가족 구성, 집, 차, 수입을 넣으면 예산을 추천</small><span>›</span></button>
         <button data-tab="stats"><b>개인별 통계</b><small>사람마다 이번 달·올해 수입, 지출, 많이 쓴 곳</small><span>›</span></button>
         <button data-tab="sms"><b>문자로 넣기</b><small>카드·은행 문자를 붙여넣어 한 번에 기록</small><span>›</span></button>
-        <button data-tab="fixed"><b>고정 수입·지출</b><small>월급, 관리비처럼 매달 자동 기록</small><span>›</span></button>
+        <button data-tab="fixed"><b>고정 수입·지출 · 카드 할부</b><small>월급, 관리비, 할부처럼 매달 자동 기록</small><span>›</span></button>
+        <button data-tab="import"><b>엑셀·다른 가계부 가져오기</b><small>다른 앱이나 은행·카드사 엑셀, CSV 내역을 더하기</small><span>›</span></button>
         <button data-tab="settings"><b>설정</b><small>가족 초대, 이름, 백업</small><span>›</span></button>
         <button data-act="manual"><b>사용법</b><small>처음이라면 한 번 읽어보세요</small><span>›</span></button>
         <button data-act="install" id="installBtn" hidden><b>홈 화면에 앱으로 설치</b><small>아이콘을 눌러 바로 열기</small><span>›</span></button>
@@ -388,6 +389,34 @@
     </section>
 
     <!-- ===== 고정 수입·지출 ===== -->
+    <section id="tab-import" hidden>
+      <button class="back" data-tab="more">‹ 더보기</button>
+      <div class="card">
+        <div class="card-head"><h2>📥 엑셀·다른 가계부 가져오기</h2></div>
+        <p class="hint" style="margin-top:0">다른 가계부 앱이나 은행·카드사에서 내려받은 <b>엑셀(.xlsx, .xls)이나 CSV</b> 파일을 고르세요. 지금 내역은 그대로 두고 <b>더하기만</b> 해요. 이미 있는 내역(같은 날짜·금액·내용)은 건너뛰어요.</p>
+        <div class="toolbar">
+          <label class="btn primary">파일 고르기<input type="file" id="impFile" accept=".xlsx,.xls,.csv,.txt" hidden></label>
+          <span class="muted" id="impFileName"></span>
+        </div>
+      </div>
+      <div class="card" id="impMapCard" hidden>
+        <div class="card-head"><h2>열 맞추기</h2><select id="impSheet" aria-label="시트"></select></div>
+        <p class="hint" style="margin-top:0">파일의 어느 열이 무엇인지 골라 주세요. 제목을 보고 미리 짐작해 두었어요. <b>날짜</b>와 <b>금액</b>은 꼭 있어야 해요.</p>
+        <div class="imp-map" id="impMap"></div>
+        <div class="imp-opts">
+          <label>사용자 열이 없으면 <select id="impUser"></select></label>
+          <label>구분 열이 없을 때, 금액이 +이면 <select id="impPlus"><option value="expense">지출 (−는 수입)</option><option value="income">수입 (−는 지출)</option></select></label>
+        </div>
+      </div>
+      <div class="card" id="impPrevCard" hidden>
+        <div class="card-head"><h2 id="impPrevTitle">미리보기</h2></div>
+        <div class="search-info" id="impSummary"></div>
+        <div class="table-wrap"><table class="list"><tbody id="impPrev"></tbody></table></div>
+        <p class="hint" id="impNote"></p>
+        <div class="toolbar"><button type="button" class="btn primary" id="impAdd">가져오기</button></div>
+      </div>
+    </section>
+
     <section id="tab-fixed" hidden>
       <button class="back" data-tab="more">‹ 더보기</button>
       <div class="card">
@@ -409,6 +438,27 @@
           <button type="submit" class="btn primary" id="rcSubmit">등록</button>
           <button type="button" class="btn" id="rcCancel" hidden>취소</button>
         </form>
+      </div>
+      <div class="card" id="instCard">
+        <div class="card-head"><h2>💳 카드 할부</h2><span class="muted" id="instSum"></span></div>
+        <div id="instList"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>새 할부 등록</h2></div>
+        <form id="instForm" class="grid-form">
+          <input id="inTitle" placeholder="무엇을 샀나요 (예: 냉장고)" required maxlength="60">
+          <input type="number" id="inTotal" placeholder="총 할부 금액" min="2" step="1" required>
+          <label class="inline"><input type="number" id="inMonths" min="2" max="60" value="12" required style="width:64px"> 개월</label>
+          <label class="inline">첫 청구 <input type="month" id="inStart" required></label>
+          <label class="inline">매월 <input type="number" id="inDay" min="1" max="31" value="15" style="width:64px"> 일</label>
+          <select id="inCat" aria-label="분류"></select>
+          <select id="inUser" aria-label="사용자"></select>
+          <input id="inMethod" placeholder="카드 (예: 신한카드)" list="methodList" maxlength="40">
+          <label class="inline" id="inPastWrap" hidden><input type="checkbox" id="inPast"> 지난 회차도 내역에 기록</label>
+          <button type="submit" class="btn primary" id="inSubmit">할부 등록</button>
+        </form>
+        <p class="hint" id="instPreview"></p>
+        <p class="hint">매달 청구 금액이 그 달 내역에 자동으로 기록돼요. 나누어 떨어지지 않는 끝전은 첫 달에 붙어요. 무이자가 아니면 <b>수수료를 더한 총 금액</b>을 넣으세요. 산 날 전체 금액을 이미 내역에 적었다면 그 내역은 지워야 두 번 잡히지 않아요.</p>
       </div>
     </section>
 
@@ -451,6 +501,7 @@
           <label class="btn">백업 불러오기<input type="file" id="importJson" accept=".json,application/json" hidden></label>
           <button type="button" class="btn" id="importLocal" hidden>이 브라우저의 예전 데이터 가져오기</button>
           <button type="button" class="btn" id="exportCsv">CSV 내보내기</button>
+          <button type="button" class="btn" data-tab="import">엑셀·다른 가계부 가져오기</button>
         </div>
         <p class="hint" id="backupInfo"></p>
         <p class="hint">백업 불러오기는 현재 가계부 내용을 백업 파일 내용으로 <b>바꿉니다</b>. 한 달에 한 번 백업해 두면 안심이에요.</p>
@@ -562,6 +613,9 @@
       <li>더보기 → 설정 → 사용자 이름에서 <b>캐릭터</b>를 눌러 나를 나타낼 이모지를 고를 수 있어요.</li>
       <li>잘못 지웠다면 아래에 잠깐 뜨는 <b>되돌리기</b>를 누르세요.</li>
       <li><b>내역</b>: 전체 목록. 사람별, 수입/지출별로 골라 볼 수 있어요. <b>🔍 검색</b> 칸에 사용처·분류·금액(예: 스타벅스, 45000)을 넣으면 모든 달에서 찾아 합계까지 보여줘요.</li>
+      <li>가족이 저장하면 다른 휴대폰에도 <b>바로 반영</b>돼요. 위쪽에 <b>● 실시간</b>이 보이면 연결된 거예요. 입력 중일 때는 다 쓰고 나서 반영돼요.</li>
+      <li>더보기 → <b>고정 수입·지출 · 카드 할부</b>: 할부로 산 물건의 총 금액과 개월 수를 넣으면 매달 청구 금액이 자동 기록되고, 몇 회차인지와 남은 금액을 보여줘요. 미리 다 갚으면 <b>중도 완납</b>을 누르세요.</li>
+      <li>더보기 → <b>엑셀·다른 가계부 가져오기</b>: 다른 앱이나 은행·카드사의 엑셀·CSV 파일을 골라 열을 맞추면 지금 내역에 더해요. 이미 있는 내역은 건너뛰어요.</li>
       <li>더보기 → 설정 → <b>백업</b>: 가계부 전체를 파일로 저장해요. 30일 넘게 백업하지 않으면 홈에 알림이 떠요.</li>
       <li><b>더보기 → 개인별 통계</b>: 사람을 고르면 그 사람의 이번 달 수입·지출, 분류별 지출, 최근 6개월, 많이 쓴 곳, 가족 비교를 봅니다.</li>
       <li>위쪽 <b>‹ 11월 ›</b>으로 다른 달을 봅니다.</li>

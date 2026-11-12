@@ -228,3 +228,8 @@ alter table public.ledger_spaces
 alter table public.ledger_spaces
   add column profile jsonb not null default '{}'::jsonb
   check (jsonb_typeof(profile) = 'object' and length(profile::text) <= 2000);
+
+-- ===== 카드 할부 (적용됨: 마이그레이션 ledger_recurring_installment) =====
+-- 고정 항목 하나가 할부 한 건. {"total":1200000,"months":12,"start":"2026-11","payoff":"2027-03-02"}
+alter table public.ledger_recurring add column installment jsonb
+  check (installment is null or (jsonb_typeof(installment) = 'object' and length(installment::text) <= 300));
