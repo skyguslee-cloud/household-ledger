@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우리집 가계부 3종 사용설명서</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --main:#CFE8D5; --main-pale:#EEF7F0; --main-line:#6FAF82; --heading:#1E3A2B;
+  --accent:#DC143C;
+  --bg-page:#FFFFFF; --bg-card:#FFFFFF; --neutral:#B9B9B9; --border:#E1E4E8;
+  --text-primary:#1A1A1A; --text-secondary:#5F6368;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg-page);color:var(--text-primary);
+  font-family:Pretendard,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  font-size:16px;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+a{color:var(--heading)}
+.wrap{max-width:960px;margin:0 auto;padding:0 16px 64px}
+
+/* 위쪽 바로가기 */
+.toc{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--border)}
+.toc .in{max-width:960px;margin:0 auto;padding:8px 16px;display:flex;gap:6px;flex-wrap:wrap}
+.toc a{text-decoration:none;font-size:14px;padding:4px 10px;border-radius:4px;background:var(--main-pale);color:var(--heading)}
+.toc a:hover{background:var(--main)}
+
+/* 표지 */
+.cover{background:var(--main);border-radius:4px;padding:32px 24px;margin:24px 0}
+.cover h1{margin:0 0 6px;font-size:30px;line-height:1.3;color:var(--heading)}
+.cover p{margin:0;color:var(--heading)}
+
+h2{border-left:4px solid var(--accent);padding-left:12px;color:var(--heading);font-size:24px;margin:48px 0 16px;line-height:1.35}
+h3{color:var(--heading);font-size:19px;margin:32px 0 10px}
+h4{color:var(--heading);font-size:16px;margin:20px 0 6px}
+.part{margin-top:56px;padding:20px 24px;background:var(--main);border-radius:4px}
+.part h2{margin:0;border:none;padding:0;font-size:26px}
+.part p{margin:4px 0 0;color:var(--heading)}
+
+.callout{background:var(--main-pale);border-left:3px solid var(--accent);padding:12px 16px;border-radius:4px;margin:16px 0}
+.key{color:var(--accent);font-weight:700}
+.muted{color:var(--text-secondary);font-size:14px}
+
+/* 카드 셋 */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:16px}
+.card h3{margin:0 0 4px;font-size:18px}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--main);color:var(--heading);font-weight:700;font-size:14px;margin-right:6px;vertical-align:1px}
+.url{display:block;margin:8px 0;padding:8px 10px;background:var(--main-pale);border-radius:4px;font-size:14px;word-break:break-all}
+.card ol{padding-left:20px;margin:8px 0}
+.card .for{font-size:14px;color:var(--text-secondary);border-top:1px solid var(--border);padding-top:8px;margin-top:8px}
+
+/* 표 */
+.tbl{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:15px}
+th,td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+thead th{background:var(--main);color:var(--heading);font-weight:700}
+tbody th{color:var(--heading);font-weight:700;width:18%;white-space:nowrap}
+
+ol.steps,ul.list{padding-left:22px}
+ol.steps li,ul.list li{margin:4px 0}
+.where{display:inline-block;font-size:13px;padding:1px 8px;border-radius:4px;background:var(--main-pale);color:var(--heading);border:1px solid var(--main);margin-right:4px}
+.tag{display:inline-block;font-size:12px;padding:0 6px;border-radius:4px;border:1px solid var(--neutral);color:var(--text-secondary);margin-left:4px;vertical-align:2px}
+.feat{border:1px solid var(--border);border-radius:4px;padding:4px 16px 12px;margin:12px 0}
+.feat h4{margin-top:12px}
+kbd{font-family:inherit;font-size:14px;padding:0 6px;border:1px solid var(--neutral);border-radius:4px;background:#fafafa}
+.qa dt{font-weight:700;color:var(--heading);margin-top:12px}
+.qa dd{margin:2px 0 0 0}
+footer{margin-top:48px;border-top:1px solid var(--border);padding-top:12px;color:var(--text-secondary);font-size:14px}
+
+@media (max-width:600px){
+  .cover h1{font-size:24px}
+  h2{font-size:21px}
+}
+@media print{
+  .toc{display:none}
+  .part,.page{break-before:page}
+  .feat,.card,table{break-inside:avoid}
+  body{font-size:13px}
+}
+</style>
+</head>
+<body>
+
+<nav class="toc"><div class="in">
+  <a href="#first">첫 장 · 접속과 차이</a>
+  <a href="#easy">초보자용</a>
+  <a href="#detail">자세한 설명서</a>
+  <a href="#faq">자주 묻는 질문</a>
+</div></nav>
+
+<div class="wrap">
+
+<!-- ===================== 첫 장 ===================== -->
+<section id="first">
+<div class="cover">
+  <h1>우리집 가계부 3종 사용설명서</h1>
+  <p>세 가계부 모두 인터넷 주소로 열어요. 화면과 기본 기능은 같고, <b>내역을 어디에 저장하고 가족과 어떻게 나누는지</b>가 달라요.</p>
+</div>
+
+<h2>세 가계부 접속 방법</h2>
+<div class="cards">
+  <div class="card">
+    <h3><span class="badge">1</span>함께 쓰는 가계부</h3>
+    <div class="muted">서버에 저장 · 가족이 실시간으로 같이 봐요</div>
+    <a class="url" href="https://household-ledger-one-iota.vercel.app/">household-ledger-one-iota.vercel.app</a>
+    <div class="muted">예비 주소: skyguslee-cloud.github.io/household-ledger/<br>안드로이드는 설치 파일(APK)로도 쓸 수 있어요.</div>
+    <ol>
+      <li>관리자에게 받은 <b>초대 링크</b>를 누르면 바로 들어가요.</li>
+      <li>또는 <b>별칭 주소</b>(주소/#별칭)를 열고 숫자 비밀번호를 한 번 넣어요.</li>
+      <li><b>누구세요?</b> 창에서 내 이름을 골라요.</li>
+    </ol>
+    <div class="for">이런 가족에게: 모두 인터넷이 잘 되고, 적자마자 서로 보고 싶을 때</div>
+  </div>
+  <div class="card">
+    <h3><span class="badge">2</span>구글 시트 가계부</h3>
+    <div class="muted">휴대폰에 먼저 저장 → 가족 구글 시트와 주고받아요</div>
+    <a class="url" href="https://skyguslee-cloud.github.io/sheet-ledger/">skyguslee-cloud.github.io/sheet-ledger/</a>
+    <ol>
+      <li>관리자 한 명이 구글 시트를 만들어 연결해 둬요. (약 10분, 처음 한 번)</li>
+      <li>가족은 관리자가 보낸 <b>가족 초대 링크</b>를 눌러요.</li>
+      <li><b>누구세요?</b>에서 이름을 고르고, 처음 비밀번호 = <b>내 이름</b>을 넣은 뒤 새 비밀번호로 바꿔요.</li>
+    </ol>
+    <div class="for">이런 가족에게: 서버 없이 가족 공유는 하고 싶고, 엑셀처럼 시트로도 보고 싶을 때</div>
+  </div>
+  <div class="card">
+    <h3><span class="badge">3</span>각자 가계부</h3>
+    <div class="muted">내 휴대폰에만 저장 · 파일로 모아서 합쳐 봐요</div>
+    <a class="url" href="https://skyguslee-cloud.github.io/each-ledger/">skyguslee-cloud.github.io/each-ledger/</a>
+    <ol>
+      <li>주소를 열고 <b>내 이름</b>만 넣으면 바로 시작해요.</li>
+      <li>연결·비밀번호 설정이 없어요.</li>
+      <li>가족 합계가 보고 싶으면 각자 <b>통합용 파일</b>을 한 사람에게 보내요.</li>
+    </ol>
+    <div class="for">이런 가족에게: 각자 따로 쓰고, 월말에 한 번 모아 보면 충분할 때</div>
+  </div>
+</div>
+
+<div class="callout"><b>공통 팁</b> — 어느 가계부든 <span class="key">홈 화면에 추가</span>해서 아이콘으로 여세요. 아이폰은 사파리 → 공유(□↑) → 홈 화면에 추가, 안드로이드는 크롬 메뉴(⋮) → 홈 화면에 추가(또는 앱 설치)예요.</div>
+
+<h2>한눈에 보는 차이점</h2>
+<div class="tbl"><table>
+<thead><tr><th></th><th>① 함께 쓰는 가계부</th><th>② 구글 시트 가계부</th><th>③ 각자 가계부</th></tr></thead>
+<tbody>
+<tr><th>내역 저장 위치</th><td>인터넷 서버(데이터베이스)</td><td>내 휴대폰 + 가족 구글 시트</td><td>내 휴대폰에만</td></tr>
+<tr><th>가족과 나누기</th><td>같은 가계부를 함께 씀</td><td>시트를 거쳐 서로 주고받음</td><td>통합용 파일을 카톡·메일로 보냄</td></tr>
+<tr><th>가족 내역이 보이는 때</th><td>저장하자마자 (● 실시간)</td><td>저장할 때 + 1분마다</td><td>파일을 받아 넣었을 때</td></tr>
+<tr><th>인터넷 없을 때</th><td>입력 안 됨</td><td>입력 됨 (연결되면 올라감)</td><td>입력 됨</td></tr>
+<tr><th>처음 준비</th><td>관리자에게 가계부 받기 (승인 신청)</td><td>관리자가 구글 시트 만들기</td><td>없음 (이름만 입력)</td></tr>
+<tr><th>들어가는 방법</th><td>초대 링크 / 별칭 + 숫자 비밀번호</td><td>초대 링크 / 시트 주소 + 가족 비밀번호, 그다음 내 비밀번호</td><td>주소 열고 이름 입력</td></tr>
+<tr><th>다른 사람 이름으로 적기</th><td>정해진 사람(관리자)만</td><td>설정에서 체크한 사람만</td><td>내가 대신 적을 사람을 설정에 추가</td></tr>
+<tr><th>가족 내역 고치기</th><td>누구나 바로 고침</td><td>누구나 고침 (나중에 고친 쪽이 남음)</td><td>받은 내역은 보기만, 고치려면 그 사람이 고쳐서 다시 보냄</td></tr>
+<tr><th>🎤 말로 적기</th><td>없음</td><td>없음</td><td><span class="key">있음</span></td></tr>
+<tr><th>여러 가계부 쓰기</th><td>있음 (맨 위 이름 ▾)</td><td>한 번에 한 시트 (연결 바꾸기)</td><td>한 휴대폰에 하나</td></tr>
+<tr><th>백업 알림</th><td>30일</td><td>30일 (시트 없이 쓰면 7일)</td><td>7일</td></tr>
+<tr><th>휴대폰 잃어버리면</th><td>다른 기기에서 다시 접속하면 그대로</td><td>시트에서 다시 받아옴</td><td>백업 파일이 없으면 되살릴 수 없음</td></tr>
+<tr><th>안드로이드 앱 파일</th><td>있음 (APK)</td><td>홈 화면 앱으로 설치</td><td>홈 화면 앱으로 설치</td></tr>
+</tbody>
+</table></div>
+
+<h3>공통 기능 (세 가계부 모두 같아요)</h3>
+<p>홈(분류별 합계) · 내역 목록과 🔍 검색 · ＋ 내역 추가 · 카드·은행 문자로 넣기 · 월간/연간 예산 · 가족 조건으로 예산 추천 · 월말 결산 · 고정 수입·지출 · 💳 카드 할부 · 개인별 통계 · 엑셀·다른 가계부 가져오기 · 백업과 CSV 내보내기 · 캐릭터(이모지) 고르기 · 지운 것 되돌리기</p>
+</section>
+
+<!-- ===================== 초보자용 ===================== -->
+<section id="easy">
+<div class="part"><h2>1부. 처음 보는 분을 위한 쉬운 설명서</h2><p>딱 이것만 알면 쓸 수 있어요. 5분이면 충분해요.</p></div>
+
+<h2>화면 읽는 법 — 아래 버튼 4개와 ＋</h2>
+<div class="tbl"><table>
+<thead><tr><th>버튼</th><th>무엇을 보나요</th></tr></thead>
+<tbody>
+<tr><th>홈</th><td>이번 달 어디에 얼마 썼는지 분류별 블록으로 보여요. 블록을 누르면 자세히 펼쳐져요.</td></tr>
+<tr><th>내역</th><td>적은 내역 전체 목록이에요. 검색도 여기서 해요.</td></tr>
+<tr><th>＋ (가운데)</th><td>돈 쓴 것·들어온 것을 적어요.</td></tr>
+<tr><th>예산</th><td>분류별 한 달 예산과 얼마나 썼는지 막대로 보여요.</td></tr>
+<tr><th>더보기</th><td>통계, 문자로 넣기, 고정 지출, 할부, 가져오기, 설정, 사용법이 있어요.</td></tr>
+</tbody>
+</table></div>
+<p class="muted">맨 위 ‹ 11월 › 화살표로 다른 달을 볼 수 있어요.</p>
+
+<h2>돈 쓴 것 적기 (세 가계부 공통)</h2>
+<ol class="steps">
+  <li>아래 가운데 <kbd>＋</kbd>를 눌러요.</li>
+  <li>금액을 넣어요. 예: 12000</li>
+  <li>분류(식비, 카페 등)를 하나 눌러요.</li>
+  <li>필요하면 사용처나 메모를 적어요. 예: 김밥천국</li>
+  <li><kbd>저장</kbd>을 눌러요. 날짜는 오늘로 자동으로 들어가요.</li>
+</ol>
+<div class="callout">잘못 지웠다면 화면 아래에 잠깐 뜨는 <span class="key">되돌리기</span>를 누르세요. 고치고 싶으면 홈에서 블록을 눌러 ✎(고치기)를 눌러요.</div>
+
+<div class="page"></div>
+<h2><span class="badge">1</span>함께 쓰는 가계부 — 처음 시작하기</h2>
+<ol class="steps">
+  <li>관리자에게 받은 <b>초대 링크</b>를 휴대폰에서 눌러요.</li>
+  <li><b>누구세요?</b> 창이 뜨면 내 이름을 눌러요.</li>
+  <li>홈 화면에 추가해요. (안드로이드는 받은 APK 파일을 설치해도 돼요)</li>
+  <li>홈 화면 아이콘으로 열었는데 연결 칸이 보이면, <b>별칭</b>과 <b>숫자 비밀번호</b>를 넣어요.</li>
+</ol>
+<p>✔ 맨 위에 <b>● 실시간</b>이 보이면 잘 연결된 거예요. 가족이 적은 내역이 바로 보여요.</p>
+<p class="muted">처음부터 내 가족 가계부를 새로 만들고 싶다면: 시작 화면 아래 <b>새 가계부 사용 신청하기</b>에 메일 주소를 남기면 관리자 승인 후 메일로 안내가 와요.</p>
+
+<h2><span class="badge">2</span>구글 시트 가계부 — 처음 시작하기</h2>
+<p><b>가족(관리자가 아닌 분)</b>은 이렇게만 하면 돼요.</p>
+<ol class="steps">
+  <li>관리자가 카톡으로 보낸 <b>가족 초대 링크</b>를 눌러요.</li>
+  <li>먼저 <b>홈 화면에 추가</b>하고, 홈 화면 아이콘으로 다시 열어요.<br><span class="muted">아이폰은 아이콘으로 처음 열면 첫 칸에 초대 링크를 통째로 붙여넣어 주세요.</span></li>
+  <li><b>누구세요?</b>에서 내 이름을 골라요.</li>
+  <li>처음 비밀번호는 <b>내 이름</b>이에요. 넣으면 바로 나만 아는 새 비밀번호를 정해요.</li>
+</ol>
+<p>✔ 맨 위 작은 글자가 <b>동기화됨</b>이면 잘 연결된 거예요. "보낼 것 N건"은 인터넷이 되면 자동으로 올라가요.</p>
+<p class="muted">관리자가 할 일(구글 시트 만들기)은 2부 자세한 설명서에 있어요.</p>
+
+<h2><span class="badge">3</span>각자 가계부 — 처음 시작하기</h2>
+<ol class="steps">
+  <li>주소를 열어요: <b>skyguslee-cloud.github.io/each-ledger/</b></li>
+  <li>내 이름을 넣어요. 이제 나만의 가계부예요.</li>
+  <li>홈 화면에 추가해요. (아이폰은 꼭! 그다음부터는 아이콘으로만 열어요)</li>
+</ol>
+<h4>🎤 말로 적기</h4>
+<ol class="steps">
+  <li>위쪽 🎤 버튼(또는 ＋ 창의 <b>말로 입력</b>)을 눌러요.</li>
+  <li>"어제 점심 김밥천국 만이천원"처럼 말해요.</li>
+  <li>날짜·금액·분류·내용이 채워지면 확인하고 <kbd>저장</kbd>.</li>
+</ol>
+<h4>👪 가족 합계 보기</h4>
+<ol class="steps">
+  <li>각자: 더보기 → <b>가족 통합 보기</b> → <b>내 파일 보내기</b> → 카톡으로 모아 볼 사람에게 보내요.</li>
+  <li>모아 볼 사람: 받은 파일을 저장한 뒤 가족 통합 보기 → <b>받은 파일 넣기</b>.</li>
+</ol>
+<div class="callout">각자 가계부는 휴대폰에만 저장돼요. 7일마다 뜨는 <span class="key">백업 알림</span>이 뜨면 꼭 백업해 주세요.</div>
+</section>
+
+<!-- ===================== 자세한 설명서 ===================== -->
+<section id="detail">
+<div class="part"><h2>2부. 자세한 설명서</h2><p>메뉴별 기능을 모두 정리했어요. 앞쪽은 세 가계부 공통, 뒤쪽은 가계부마다 다른 기능이에요.</p></div>
+
+<h2>A. 공통 기능</h2>
+
+<div class="feat">
+<h4>홈 <span class="where">아래 홈</span></h4>
+<ul class="list">
+  <li>이번 달 지출·수입을 분류별 블록으로 보여요. 큰 금액은 "160만원"처럼 짧게 보여요.</li>
+  <li>블록을 누르면 정확한 금액과 누가·어떻게(카드·현금 등) 썼는지 펼쳐져요. ✎로 고치고 🗑로 지워요.</li>
+  <li>매달 25일부터 <b>월말 결산</b> 알림, 오래 백업하지 않았으면 <b>백업 알림</b>이 홈에 떠요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>내역 추가 <span class="where">가운데 ＋</span></h4>
+<ul class="list">
+  <li>지출/수입 고르기, 금액, 분류, 사용처·메모, 결제 수단, 날짜를 적어요.</li>
+  <li>같은 가게를 한 번 분류해 두면 다음부터 그 분류가 자동으로 골라져요.</li>
+  <li>다른 사람 이름으로 적기는 가계부마다 허용 방식이 달라요(뒤쪽 B 참고).</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>내역 · 검색 <span class="where">아래 내역</span></h4>
+<ul class="list">
+  <li>전체 목록을 사람별, 수입/지출별로 골라 봐요. 분류별·사용자별 지출 합계도 함께 보여요.</li>
+  <li>🔍 검색 칸에 사용처·분류·금액(예: 스타벅스, 45000)을 넣으면 <b>모든 달</b>에서 찾아 건수와 합계를 보여줘요.</li>
+  <li>다른 해의 내역은 날짜가 "25.03.14"처럼 연도와 함께 보여요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>카드·은행 문자로 넣기 <span class="where">더보기 → 문자로 넣기</span> <span class="where">＋ → 카드·은행 문자로 넣기</span></h4>
+<ol class="steps">
+  <li>카드 승인·입출금 문자(카톡 알림)를 길게 눌러 복사해요. 여러 건을 한꺼번에 복사해도 돼요.</li>
+  <li>붙여넣기 → <b>인식하기</b>.</li>
+  <li>인식 결과에서 넣을 것만 체크하고 <b>선택 항목 추가</b>.</li>
+</ol>
+</div>
+
+<div class="feat">
+<h4>예산 <span class="where">아래 예산</span></h4>
+<ul class="list">
+  <li><b>월간 예산</b>: 분류별 한 달 예산을 적어요. 새 달이 되면 지난달 예산이 이어지고, 고친 칸만 그 달에 적용돼요.</li>
+  <li>막대 색: 회색(여유) → 검정(80% 넘음) → 빗금(초과).</li>
+  <li><b>연간 예산</b>: 여행, 경조사·명절, 미용, 옷, 자동차보험·세금, 재산세, 가전·가구는 1년 단위로 따로 관리해요.</li>
+  <li><b>월말 결산</b>: 이번 달 쓴 돈을 확인하고, 최근 3개월 지출을 바탕으로 추천한 금액으로 다음 달 예산을 정해요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>우리 가족 조건 · 예산 추천 <span class="where">더보기 → 우리 가족 조건</span> <span class="where">예산 → 가족 조건으로 추천</span></h4>
+<ul class="list">
+  <li>어른·아이 수와 학년, 사는 곳, 집(자가·전세 등), 차, 수입, 저축 목표를 넣으면 분류별 예산을 추천해요.</li>
+  <li>추천된 칸을 고쳐서 저장하면 돼요. 조건은 언제든 바꿀 수 있어요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>고정 수입·지출 <span class="where">더보기 → 고정 수입·지출 · 카드 할부</span></h4>
+<ul class="list">
+  <li>월급, 관리비, 통신비처럼 매달 같은 날 생기는 돈을 등록하면 그날 자동으로 기록돼요.</li>
+  <li>금액이 바뀌면 <b>금액 변경</b>에서 "이번 달부터 / 다음 달부터"를 골라요. 지난 기록은 그대로예요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>💳 카드 할부 <span class="where">같은 화면 아래쪽</span></h4>
+<ul class="list">
+  <li>물건 이름, 총 금액, 개월 수, 첫 청구 달, 청구일, 분류, 사람, 결제 수단을 넣고 등록해요.</li>
+  <li>매달 청구액이 자동 기록돼요. 나누어 떨어지지 않는 금액은 첫 달에 더해요. (예: 1,000,005원 12개월 → 첫 달 83,342원, 이후 83,333원)</li>
+  <li>목록에 "3/12회차", 남은 금액, 진행 막대가 보이고, 내역에는 <b>할부 3/12</b> 표시가 붙어요.</li>
+  <li>이미 지난 달부터 시작했다면 "지난 회차도 기록"을 체크하면 지난 달 것도 넣어요.</li>
+  <li>미리 다 갚았다면 <b>중도 완납</b> → 남은 금액이 한 건으로 기록되고 할부가 끝나요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>개인별 통계 <span class="where">더보기 → 개인별 통계</span></h4>
+<ul class="list">
+  <li>사람을 고르면 그 사람의 이번 달 수입·지출, 분류별 지출, 최근 6개월 지출, 많이 쓴 곳, 올해 합계, 가족 비교를 보여줘요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>📥 엑셀·다른 가계부 가져오기 <span class="where">더보기 → 엑셀·다른 가계부 가져오기</span></h4>
+<ol class="steps">
+  <li>다른 가계부 앱, 은행·카드사에서 받은 엑셀(.xlsx/.xls) 또는 CSV 파일을 골라요.</li>
+  <li><b>열 맞추기</b>: 날짜·금액·내용·분류 등 어느 열인지 자동으로 찾아요. 틀린 칸만 바꿔요. 시트가 여러 개면 시트도 골라요.</li>
+  <li>누구 내역으로 넣을지, 금액에 +가 붙은 것을 수입으로 볼지 정해요.</li>
+  <li><b>미리보기</b>에서 확인하고 추가. 이미 있는 내역(같은 날·금액·내용)은 자동으로 건너뛰어요.</li>
+</ol>
+<p class="muted">은행 CSV는 한글이 깨지는 형식(EUC-KR)도 알아서 읽어요. 한 번에 5,000건까지 넣을 수 있어요.</p>
+</div>
+
+<div class="feat">
+<h4>백업 · 내보내기 <span class="where">더보기 → 설정 → 백업 · 내보내기</span></h4>
+<ul class="list">
+  <li><b>전체 백업 (JSON)</b>: 가계부 전체를 파일 하나로 저장해요. 휴대폰에서는 카톡·메일·드라이브로 보내는 창이 떠요.</li>
+  <li><b>백업 불러오기</b>: 백업 파일 내용으로 <span class="key">지금 가계부를 바꿔요</span>. 신중하게 쓰세요.</li>
+  <li><b>CSV 내보내기</b>: 엑셀에서 열 수 있는 표 파일로 내보내요.</li>
+</ul>
+</div>
+
+<div class="feat">
+<h4>설정 · 기타 <span class="where">더보기 → 설정</span></h4>
+<ul class="list">
+  <li><b>사용자 이름</b>: 가족 이름을 바꾸고, 캐릭터를 눌러 나를 나타낼 이모지를 골라요.</li>
+  <li><b>위험 구역</b>: 이 기기 연결 해제/지우기, 전체 데이터 삭제. 누르기 전에 꼭 백업하세요.</li>
+  <li>맨 위 내 이름을 누르면 "누구세요?"를 다시 골라요.</li>
+</ul>
+</div>
+
+<div class="page"></div>
+<h2>B. 가계부마다 다른 기능</h2>
+
+<h3><span class="badge">1</span>함께 쓰는 가계부</h3>
+<div class="feat">
+<h4>들어가는 방법 3가지</h4>
+<ul class="list">
+  <li><b>초대 링크</b>: 설정 → 가계부 공유 → <b>초대 링크 복사</b>로 만든 링크. 열자마자 같은 가계부에 연결돼요. 링크가 있으면 누구나 볼 수 있으니 가족에게만 보내세요.</li>
+  <li><b>별칭 주소</b>: 설정 → 별칭 주소에서 한글·영문 소문자·숫자 1~4글자로 정해요. 주소/#별칭으로 열고 숫자 비밀번호를 한 번 넣으면 돼요. 비밀번호를 5번 틀리면 잠시 잠겨요.</li>
+  <li><b>가계부 키 직접 넣기</b>: 시작 화면 연결 칸에 키나 별칭을 넣어요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>● 실시간 반영</h4>
+<ul class="list">
+  <li>가족이 저장하면 다른 휴대폰에도 바로 바뀌어요. 맨 위에 <b>● 실시간</b>이 보이면 연결된 상태예요.</li>
+  <li>내가 입력 중일 때는 다 쓰고 나서 화면이 바뀌어요. 1분마다 자동 새로고침도 해요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>여러 가계부 쓰기</h4>
+<ul class="list">
+  <li>맨 위 가계부 이름(▾)을 눌러 다른 가계부로 바꾸거나 <b>＋ 다른 가계부 추가</b>를 눌러요. 별칭으로도 추가할 수 있어요.</li>
+  <li>가계부마다 "내 이름"을 따로 기억해요. 목록에서 이름 바꾸기·목록에서 빼기도 돼요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>새 가계부 신청 · 안드로이드 앱</h4>
+<ul class="list">
+  <li>시작 화면 <b>새 가계부 사용 신청하기</b>에 메일 주소를 남기면, 관리자 승인 후 가계부 키를 메일로 받아요.</li>
+  <li>안드로이드는 관리자에게 받은 <b>설치 파일(APK)</b>로 일반 앱처럼 설치할 수 있어요. 처음 열면 별칭과 비밀번호를 넣어요.</li>
+  <li>다른 사람 이름으로 적기는 정해진 관리자만 할 수 있어요.</li>
+</ul>
+</div>
+<div class="callout">무료 인터넷 서버를 쓰고 있어요. 한 달에 한 번 <span class="key">전체 백업</span>을 해 두면 서버에 문제가 생겨도 되살릴 수 있어요.</div>
+
+<h3><span class="badge">2</span>구글 시트 가계부</h3>
+<div class="feat">
+<h4>관리자: 구글 시트 만들기 (처음 한 번, 컴퓨터로 약 10분)</h4>
+<ol class="steps">
+  <li><b>sheets.new</b>를 열어 새 구글 시트를 만들어요. 이름 예: 우리집 가계부.</li>
+  <li>메뉴 <b>확장 프로그램 → Apps Script</b>를 열어요.</li>
+  <li>Code.gs 내용을 모두 지우고, 앱 만든 사람에게 받은 <b>Code.js</b> 내용을 통째로 붙여넣어요.</li>
+  <li>맨 위 <code>var FAMILY_CODE = '…';</code> 따옴표 안을 <b>가족 비밀번호</b>(4글자 이상)로 바꿔요.</li>
+  <li>💾 저장 → 함수 칸에서 <b>setup</b> → ▶ 실행. 권한 창이 뜨면 내 계정 → 고급 → (안전하지 않음)으로 이동 → 허용.<br><span class="muted">직접 만든 스크립트라 뜨는 경고예요. 이 시트만 읽고 써요.</span></li>
+  <li>시트 아래에 <b>entries</b>, <b>settings</b> 탭이 생기면 성공이에요.</li>
+  <li><b>배포 → 새 배포</b> → ⚙ 웹 앱 → 실행 사용자: 나, 액세스: <b>모든 사용자</b> → 배포 → <b>웹 앱 URL</b>을 복사해요.</li>
+  <li>휴대폰에서 앱 주소를 열고 홈 화면에 추가 → 아이콘으로 열어 <b>웹 앱 URL</b>과 <b>가족 비밀번호</b>를 넣고 <b>구글 시트에 연결</b>.</li>
+  <li>더보기 → 설정에서 가계부 이름, 가족 이름(가족1~가족5), "다른 사람 것도 입력"할 사람을 정해요.</li>
+  <li>설정 → <b>가족 초대 링크 복사</b> → 카톡으로 가족에게만 보내요.</li>
+</ol>
+</div>
+<div class="feat">
+<h4>주고받기(동기화)</h4>
+<ul class="list">
+  <li>입력하면 먼저 휴대폰에 저장되고, 저장할 때와 1분마다 시트와 주고받아요. 실시간은 아니에요.</li>
+  <li>맨 위 작은 글자: <b>동기화됨</b> / <b>보낼 것 N건</b>. 글자를 누르면 바로 주고받아요.</li>
+  <li>같은 내역을 두 사람이 고치면 <b>나중에 고친 쪽</b>이 남아요.</li>
+  <li>시트에서 금액·메모를 직접 고쳐도 휴대폰에 반영돼요. 줄은 지우지 말고 <b>deleted</b> 칸에 1을 넣으세요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>사람마다 비밀번호</h4>
+<ul class="list">
+  <li>누구세요?에서 이름을 고를 때 각자 비밀번호를 넣어요. 처음 비밀번호는 자기 이름이고, 바로 새 비밀번호로 바꿔요.</li>
+  <li>잊었으면 "다른 사람 것도 입력"에 체크된 가족이 설정 → 사용자 이름에서 <b>초기화</b> → 다시 이름으로 돌아가요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>설정 메뉴 (구글 시트 연결)</h4>
+<ul class="list">
+  <li><b>지금 주고받기</b>, <b>가족 초대 링크 복사</b>, <b>연결 바꾸기</b>(다른 시트로), <b>연결 끊기</b>.</li>
+  <li>연결 바꾸기 때 "이 내역을 새 시트로 옮길까요?" — 다른 가족 시트면 취소(옮기지 않기), 우리 가족이 시트를 새로 만든 거면 확인(옮기기).</li>
+  <li>"이 휴대폰의 가계부 지우기"는 이 기기만 비우고 시트는 그대로예요. "전체 데이터 삭제"는 시트와 가족 휴대폰에서도 지워요.</li>
+  <li><b>시트 없이 이 휴대폰에서만 쓰기</b>도 돼요. 나중에 시트에 연결하면 그동안 적은 내역도 함께 올라가요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>다른 가족에게 나눠주기</h4>
+<ul class="list">
+  <li>앱 주소는 모두 같고, 가족마다 <b>자기 구글 시트</b>를 연결해요. 그래서 가족끼리 내역이 섞이지 않고, 앱 만든 사람도 볼 수 없어요.</li>
+  <li>보내줄 것은 앱 주소와 Code.js 파일 두 가지예요. 그 가족 관리자가 위 "구글 시트 만들기"를 똑같이 해요.</li>
+</ul>
+</div>
+
+<h3><span class="badge">3</span>각자 가계부</h3>
+<div class="feat">
+<h4>나만의 가계부</h4>
+<ul class="list">
+  <li>처음 열면 내 이름만 물어요. 서버·계정·비밀번호·시트 연결이 없어요.</li>
+  <li>아이 용돈처럼 대신 적어 줄 사람이 있으면 더보기 → 설정 → <b>가계부 이름 · 사람</b>에 이름을 넣어요.</li>
+  <li>인터넷이 없어도 적을 수 있어요. (말로 적기만 인터넷이 필요해요)</li>
+</ul>
+</div>
+<div class="feat">
+<h4>🎤 말로 적기</h4>
+<ul class="list">
+  <li>위쪽 🎤 또는 ＋ 창의 <b>말로 입력</b>을 누르고 말해요.</li>
+  <li>예: "어제 점심 김밥천국 만이천원", "스타벅스 사천오백원 카드로", "월급 삼백만원 들어왔어".</li>
+  <li>날짜(오늘·어제·그저께·15일·금요일), 금액, 분류, 내용, 수입/지출이 자동으로 채워져요. <b>확인하고 저장</b>을 눌러야 저장돼요.</li>
+  <li>크롬(안드로이드·PC)과 아이폰 사파리에서 돼요. 처음 한 번 마이크 허용을 눌러 주세요.</li>
+</ul>
+</div>
+<div class="feat">
+<h4>👪 가족 통합 보기 <span class="where">더보기 → 가족 통합 보기</span></h4>
+<ul class="list">
+  <li><b>내 파일 보내기</b>: 통합용 파일(JSON)을 만들어 카톡·메일로 모아 볼 사람에게 보내요.</li>
+  <li><b>받은 파일 넣기</b>: 받은 파일을 골라요. 여러 파일을 한 번에 골라도 돼요.</li>
+  <li>같은 사람의 새 파일을 넣으면 최신 내용으로 통째로 바뀌어 겹치지 않아요. 더 예전 파일은 무시해요.</li>
+  <li>가족 전체 수입·지출, 분류별 지출과 누가 썼는지, 이 달 내역을 보여줘요.</li>
+  <li>받은 내역은 보기만 해요. 2주 넘은 파일은 표시가 붙어요. 월말처럼 날을 정해 보내면 편해요.</li>
+</ul>
+</div>
+<div class="callout">각자 가계부는 <span class="key">휴대폰에만 저장</span>돼요. 7일마다 뜨는 백업 알림을 따르고, 아이폰은 꼭 홈 화면 아이콘으로만 쓰세요. 사파리에서 오래 안 열면 저장 내용이 지워질 수 있어요.</div>
+</section>
+
+<!-- ===================== 자주 묻는 질문 ===================== -->
+<section id="faq">
+<h2>자주 묻는 질문</h2>
+
+<h3><span class="badge">1</span>함께 쓰는 가계부</h3>
+<dl class="qa">
+  <dt>가족이 적은 게 안 보여요.</dt><dd>맨 위 "동기화" 글자를 누르면 새로고침돼요. ● 실시간이 안 보이면 인터넷 연결을 확인하세요.</dd>
+  <dt>새 휴대폰으로 바꿨어요.</dt><dd>초대 링크를 다시 받거나, 별칭과 비밀번호로 들어가면 내역이 그대로 있어요.</dd>
+  <dt>홈 화면 아이콘으로 여니 처음 화면이 나와요.</dt><dd>연결 칸에 별칭을 넣고 비밀번호를 넣으세요. 아이폰은 초대 링크를 한 번 더 붙여넣어도 돼요.</dd>
+</dl>
+
+<h3><span class="badge">2</span>구글 시트 가계부</h3>
+<dl class="qa">
+  <dt>"보낼 것 N건"이 계속 남아 있어요.</dt><dd>인터넷을 확인하고 위쪽 글자를 눌러 보세요. 휴대폰에는 안전하게 저장돼 있어요.</dd>
+  <dt>가족이 적은 게 안 보여요.</dt><dd>상대방 휴대폰이 인터넷에 연결돼야 올라와요. 위쪽 글자를 누르면 바로 주고받아요.</dd>
+  <dt>비밀번호를 잊었어요.</dt><dd>"다른 사람 것도 입력"에 체크된 가족이 설정에서 초기화하면 다시 이름으로 돌아가요.</dd>
+  <dt>시트 코드가 새로 나왔대요.</dt><dd>Apps Script에 새 Code.js를 붙여넣고(비밀번호 줄 다시 고치기) 저장 → 배포 → 배포 관리 → ✎ → 버전: 새 버전 → 배포. 주소는 그대로예요.</dd>
+  <dt>가족 비밀번호를 바꾸고 싶어요.</dt><dd>Apps Script의 FAMILY_CODE를 바꾸고 setup을 다시 실행해요. 가족에게 새 초대 링크를 보내 주세요.</dd>
+</dl>
+
+<h3><span class="badge">3</span>각자 가계부</h3>
+<dl class="qa">
+  <dt>가족 내역이 예전 것이에요.</dt><dd>그 사람에게 새 통합용 파일을 다시 보내 달라고 하세요.</dd>
+  <dt>🎤 버튼이 안 보여요.</dt><dd>음성 인식이 없는 브라우저(삼성 인터넷·파이어폭스 등)예요. 크롬이나 사파리로 여세요.</dd>
+  <dt>마이크 권한을 거절했어요.</dt><dd>주소창 옆 자물쇠(아이폰은 설정 → 사파리 → 마이크)에서 허용으로 바꿔요.</dd>
+  <dt>새 휴대폰으로 바꿨어요.</dt><dd>예전 휴대폰에서 설정 → 전체 백업 → 새 휴대폰에서 백업 불러오기. 가족 통합 보기에서도 같은 사람으로 이어져요.</dd>
+</dl>
+
+<h3>세 가계부 공통</h3>
+<dl class="qa">
+  <dt>잘못 지웠어요.</dt><dd>바로 아래에 뜨는 되돌리기를 누르세요. 지나갔다면 백업 파일로 되살릴 수 있어요.</dd>
+  <dt>홈 화면에 앱으로 두려면?</dt><dd>안드로이드: 더보기 → 홈 화면에 앱으로 설치(없으면 크롬 ⋮ → 홈 화면에 추가). 아이폰: 사파리 공유(□↑) → 홈 화면에 추가.</dd>
+  <dt>세 가계부끼리 내역을 옮길 수 있나요?</dt><dd>한 가계부에서 CSV 내보내기 → 다른 가계부의 엑셀·다른 가계부 가져오기로 넣으면 돼요.</dd>
+</dl>
+</section>
+
+<footer>우리집 가계부 3종 사용설명서 · 2026년 11월 기준 · 각 앱의 더보기 → 사용법에도 같은 안내가 있어요.</footer>
+</div>
+</body>
+</html>
